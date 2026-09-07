@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useState } from 'react';
+import { AccountButton } from '@/components/account-button';
 import { useStore } from '@/components/store-provider';
 
 const navItems = [
@@ -41,6 +42,7 @@ export function StoreHeader() {
         <button aria-label="Buscar"><Icon>⌕</Icon></button>
       </form>
       <div className="account-actions">
+        <AccountButton />
         <button aria-label="Mis favoritos" onClick={() => showNotice('Tus favoritos quedan guardados en este dispositivo.')}><Icon>♡</Icon><span>favoritos</span></button>
         <button aria-label="Consultar por WhatsApp" onClick={() => window.open('https://wa.me/59892143420', '_blank', 'noopener,noreferrer')}><Icon>◌</Icon><span>consultas</span></button>
         <button className="bag-button" aria-label={`Bolsa con ${cartCount} productos`} onClick={openCart}><Icon>♧</Icon><b>{cartCount}</b><span>mi bolsa</span></button>
