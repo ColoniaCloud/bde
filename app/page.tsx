@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { products as catalogProducts } from './catalog-data';
+import { AccountButton } from '@/components/account-button';
 import { CheckoutActions } from '@/components/checkout-actions';
 import { CatalogUpdateStatus } from '@/components/catalog-update-status';
 import { ProductImage } from '@/components/product-image';
@@ -394,6 +395,7 @@ export default function Home() {
           <button aria-label="Buscar"><Icon>⌕</Icon></button>
         </form>
         <div className="account-actions">
+          <AccountButton />
           <button aria-label="Mis favoritos"><Icon>♡</Icon><span>favoritos</span></button>
           <button aria-label="Consultar por WhatsApp" onClick={() => window.open('https://wa.me/59892143420', '_blank', 'noopener,noreferrer')}><Icon>◌</Icon><span>consultas</span></button>
           <button className="bag-button" aria-label={`Bolsa con ${cartCount} productos`} onClick={() => setCartOpen(true)}>
