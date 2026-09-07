@@ -134,6 +134,16 @@ a { color: inherit; text-decoration: none; }
 .story-art span { text-transform: uppercase; font-size: 9px; letter-spacing: .18em; z-index: 1; }.story-art b { font: italic 600 clamp(58px, 7vw, 88px)/.92 var(--serif); z-index: 1; align-self: center; margin-bottom: 70px; text-align: center; }
 .story-copy { padding: clamp(40px, 6vw, 90px); display: flex; flex-direction: column; align-items: flex-start; justify-content: center; background: #f5e7c7; color: var(--ink); }
 .story-copy h2 { margin: 0 0 20px; font: 600 clamp(29px, 3.3vw, 46px)/1.1 var(--serif); letter-spacing: -.035em; }.story-copy > span { max-width: 440px; color: #625c48; font-size: 13px; line-height: 1.7; }.story-copy button, .story-copy a { margin-top: 26px; background: var(--ink); color: #fff9df; }
+.suggestions-copy { justify-content: flex-start; padding-top: clamp(36px, 5vw, 58px); padding-bottom: clamp(36px, 5vw, 58px); }
+.suggestions-copy h2 { max-width: 470px; }
+.suggestion-grid { width: 100%; display: grid; gap: 9px; margin-top: 24px; }
+.suggestion-grid article { min-height: 104px; display: grid; grid-template-columns: 82px 1fr auto; align-items: center; gap: 14px; padding: 10px; border: 1px solid #e2d1ad; background: #fffdf4; }
+.suggestion-grid img { width: 82px; height: 82px; object-fit: contain; mix-blend-mode: multiply; background: #f8f1df; }
+.suggestion-grid article div { min-width: 0; }
+.suggestion-grid article span { display: block; color: var(--orange-dark); font-size: 9px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+.suggestion-grid article strong { display: block; margin: 5px 0 6px; font: 600 15px/1.25 var(--serif); }
+.suggestion-grid article small { color: var(--muted); font-size: 11px; font-weight: 700; }
+.suggestion-grid article button { margin: 0; border: 1px solid var(--ink); border-radius: 50%; width: 38px; height: 38px; padding: 0; display: grid; place-items: center; background: transparent; color: var(--ink); font-size: 9px; }
 .ekos-info { margin-bottom: 85px; padding-top: 58px; padding-bottom: 58px; background: #f0f4ef; color: #284334; }
 .ekos-intro { max-width: 780px; margin: 0 auto 42px; text-align: center; }
 .ekos-intro > p { margin: 0 0 10px; color: var(--orange); font-size: 12px; font-weight: 700; letter-spacing: .15em; text-transform: uppercase; }

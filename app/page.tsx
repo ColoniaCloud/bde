@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { products as catalogProducts } from './catalog-data';
 import { AccountButton } from '@/components/account-button';
+import { useAuth } from '@/components/auth-provider';
 import { CheckoutActions } from '@/components/checkout-actions';
 import { CatalogUpdateStatus } from '@/components/catalog-update-status';
 import { ProductImage } from '@/components/product-image';
@@ -298,6 +299,7 @@ function Icon({ children }: { children: React.ReactNode }) {
 }
 
 export default function Home() {
+  const { user, signInWithGoogle } = useAuth();
   const [query, setQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Todos');
   const [cart, setCart] = useState<Record<number, number>>({});
@@ -338,6 +340,16 @@ export default function Home() {
   const cartItems = products.filter((product) => cart[product.id]);
   const cartCount = Object.values(cart).reduce((sum, quantity) => sum + quantity, 0);
   const cartTotal = cartItems.reduce((sum, product) => sum + product.price * cart[product.id], 0);
+  const suggestionProducts = useMemo(() => {
+    const referenceIds = [...favorites, ...Object.keys(cart).map(Number)];
+    const referenceCategories = products.filter((product) => referenceIds.includes(product.id)).map((product) => product.category);
+    const personalized = products.filter((product) => referenceCategories.includes(product.category) && !referenceIds.includes(product.id));
+    const fallback = products.filter((product) => product.discount || product.tag);
+    const pool = personalized.length ? personalized : fallback;
+
+    return pool.slice(0, 3);
+  }, [cart, favorites]);
+  const accountName = user?.email?.split('@')[0] || 'tu cuenta';
 
   function addToCart(product: Product) {
     setCart((current) => ({ ...current, [product.id]: (current[product.id] ?? 0) + 1 }));
@@ -489,7 +501,25 @@ export default function Home() {
 
       <section className="story-banner section-shell">
         <div className="story-art"><span>boutique del este</span><b>Originales</b></div>
-        <div className="story-copy"><p>compras simples</p><h2>Elegí online.<br />Coordinamos la entrega.</h2><span>Encontrá perfumes, maquillaje, cuidado personal y regalos. También podés consultarnos por lámparas de luz roja.</span><a href="#productos">ver productos</a></div>
+        <div className="story-copy suggestions-copy">
+          <p>{user ? `para ${accountName}` : 'sugerencias para vos'}</p>
+          <h2>{user ? 'Elegidos segun tu recorrida.' : 'Entrá y descubrí ideas para tu próxima compra.'}</h2>
+          <span>{user ? 'Tomamos como referencia tus favoritos y tu bolsa para acercarte productos de la misma línea.' : 'Podés entrar con Google para que Boutique recuerde tu cuenta y te muestre una selección más cercana a lo que mirás.'}</span>
+          <div className="suggestion-grid" aria-label="Sugerencias de productos">
+            {suggestionProducts.map((product) => (
+              <article key={product.id}>
+                <ProductImage src={product.image} alt={product.name} loading="lazy" />
+                <div>
+                  <span>{product.brand}</span>
+                  <strong>{product.name}</strong>
+                  <small>{currency.format(product.price)}</small>
+                </div>
+                <button onClick={() => setSelectedProduct(product)}>ver</button>
+              </article>
+            ))}
+          </div>
+          {user ? <a href="#productos">seguir viendo productos</a> : <button onClick={() => signInWithGoogle()}>ingresar con Google</button>}
+        </div>
       </section>
 
       <section id="ekos-info" className="ekos-info section-shell" aria-labelledby="ekos-title">
