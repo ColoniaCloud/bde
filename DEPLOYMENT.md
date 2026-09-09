@@ -2,15 +2,18 @@
 
 La tienda usa Next.js y requiere Node.js 22.13 o superior.
 
+El VPS es el unico destino de despliegue soportado: `npm run build` y `npm start` usan Next.js
+directamente. No hay build alternativo para Cloudflare Workers ni para Vercel.
+
 ## Instalación
 
 ```bash
 npm ci
-npm run build:vps
-npm run start:vps
+npm run build
+npm start
 ```
 
-En producción conviene ejecutar `npm run start:vps` con PM2 o systemd y publicar la aplicación mediante Nginx con HTTPS.
+En producción conviene ejecutar `npm start` con PM2 o systemd y publicar la aplicación mediante Nginx con HTTPS.
 
 ## Variables privadas
 
