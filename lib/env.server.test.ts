@@ -27,7 +27,6 @@ const clean = {
   SITE_URL: undefined,
   MERCADOPAGO_ACCESS_TOKEN: undefined,
   MERCADOPAGO_WEBHOOK_SECRET: undefined,
-  ORDER_DATA_DIR: undefined,
 };
 
 beforeEach(() => vi.stubEnv('NODE_ENV', 'test'));

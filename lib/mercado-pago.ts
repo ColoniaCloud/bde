@@ -48,6 +48,16 @@ export function getSiteUrl() {
   throw new MercadoPagoError('Falta configurar la dirección pública de la tienda.', 503);
 }
 
+/**
+ * Verifica que Mercado Pago esté configurado, antes de reservar un número de
+ * orden. Sin esto, una tienda mal configurada deja huecos en la numeración
+ * correlativa por pedidos que nunca podrían pagarse.
+ */
+export function assertMercadoPagoReady() {
+  getAccessToken();
+  getSiteUrl();
+}
+
 export async function buildOrderItems(input: CheckoutItemInput[], lookup: ProductLookup) {
   if (!Array.isArray(input) || input.length === 0 || input.length > 50) {
     throw new MercadoPagoError('La bolsa está vacía o contiene demasiados productos.', 400);

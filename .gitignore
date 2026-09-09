@@ -32,9 +32,6 @@ yarn-error.log*
 # generated files
 next-env.d.ts
 
-# Secuencia privada de órdenes creada en el servidor
-/data/order-sequence.json
-/data/order-sequence.lock
 
 # Archivos subidos desde el panel: viven en el disco del servidor, no en git
 /public/media/

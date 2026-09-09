@@ -42,7 +42,6 @@ const schema = z.object({
   ORDER_FROM_EMAIL: blankAsAbsent(z.email().optional()),
   ORDER_COPY_EMAIL: blankAsAbsent(z.email().optional()),
 
-  ORDER_DATA_DIR: blankAsAbsent(z.string().min(1).optional()),
 });
 
 function load() {

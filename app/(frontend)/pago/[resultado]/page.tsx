@@ -1,5 +1,6 @@
 import { ClearPaidCart } from '@/components/clear-paid-cart';
 import { getMercadoPagoOrder } from '@/lib/mercado-pago';
+import { findOrderByMercadoPagoId, recordPaymentResult } from '@/lib/orders';
 import Link from 'next/link';
 
 type PaymentPageProps = {
@@ -55,12 +56,26 @@ export default async function PaymentResultPage({ params, searchParams }: Paymen
   let reference = first(query.external_reference) || '';
   let amount = '';
 
+  let orderNumber = '';
+
   if (orderId) {
     try {
       const order = await getMercadoPagoOrder(orderId);
       result = verifiedResult(order.status, order.status_detail);
       reference = order.external_reference || reference;
       amount = order.total_amount || '';
+
+      // El cliente suele volver antes de que llegue el webhook. Aprovechamos la
+      // consulta que ya hicimos para dejar el pedido con su estado real.
+      if (result === 'aprobado' || result === 'rechazado') {
+        await recordPaymentResult(
+          orderId,
+          result === 'aprobado' ? 'paid' : 'cancelled',
+          `retorno del cliente · ${order.status}`,
+        );
+      }
+
+      orderNumber = (await findOrderByMercadoPagoId(orderId))?.number ?? '';
     } catch {
       result = 'desconocido';
     }
@@ -82,7 +97,8 @@ export default async function PaymentResultPage({ params, searchParams }: Paymen
         <p>{content.eyebrow}</p>
         <h1>{content.title}</h1>
         <div>{content.description}</div>
-        {(reference || orderId || amount) && <dl>
+        {(reference || orderId || amount || orderNumber) && <dl>
+          {orderNumber && <><dt>Orden de compra</dt><dd>N.º {orderNumber}</dd></>}
           {reference && <><dt>Referencia</dt><dd>{reference}</dd></>}
           {orderId && <><dt>Orden Mercado Pago</dt><dd>{orderId}</dd></>}
           {amount && <><dt>Total</dt><dd>$ {Number(amount).toLocaleString('es-UY')} UYU</dd></>}

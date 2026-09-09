@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { products } from '@/lib/catalog';
 import type { ProductLookup } from '@/lib/mercado-pago';
-import { getOrderLines, OrderReceiptError } from '@/lib/order-receipts';
+import { getOrderLines, OrderError } from '@/lib/order-lines';
 
 const catalogue = new Map(
   products.map((product) => [
@@ -24,7 +24,7 @@ describe('getOrderLines', () => {
   it('rechaza una bolsa vacía con 400', async () => {
     await expect(getOrderLines([], lookup)).rejects.toMatchObject({
       status: 400,
-      constructor: OrderReceiptError,
+      constructor: OrderError,
     });
   });
 
@@ -33,12 +33,12 @@ describe('getOrderLines', () => {
     ['cantidad cero', [{ id: 1, quantity: 0 }]],
     ['cantidad mayor a 20', [{ id: 1, quantity: 21 }]],
   ])('rechaza %s', async (_label, items) => {
-    await expect(getOrderLines(items, lookup)).rejects.toThrow(OrderReceiptError);
+    await expect(getOrderLines(items, lookup)).rejects.toThrow(OrderError);
   });
 
   it('rechaza un producto que ya no está en el catálogo', async () => {
     await expect(getOrderLines([{ id: first.id, quantity: 1 }], emptyLookup))
-      .rejects.toThrow(OrderReceiptError);
+      .rejects.toThrow(OrderError);
   });
 
   it('calcula el total de cada línea con el precio del servidor', async () => {

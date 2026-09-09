@@ -69,6 +69,7 @@ export interface Config {
   collections: {
     products: Product;
     categories: Category;
+    orders: Order;
     media: Media;
     users: User;
     'payload-kv': PayloadKv;
@@ -80,6 +81,7 @@ export interface Config {
   collectionsSelect: {
     products: ProductsSelect<false> | ProductsSelect<true>;
     categories: CategoriesSelect<false> | CategoriesSelect<true>;
+    orders: OrdersSelect<false> | OrdersSelect<true>;
     media: MediaSelect<false> | MediaSelect<true>;
     users: UsersSelect<false> | UsersSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
@@ -237,6 +239,55 @@ export interface Media {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "orders".
+ */
+export interface Order {
+  id: number;
+  number: string;
+  status: 'pending' | 'paid' | 'cancelled' | 'delivered';
+  paymentMethod: 'mercado-pago' | 'whatsapp';
+  /**
+   * Si está sin marcar, el correo falló y el pedido igual quedó registrado.
+   */
+  emailSent?: boolean | null;
+  customerName: string;
+  customerEmail: string;
+  /**
+   * Precios congelados al momento de la compra.
+   */
+  lines: {
+    code: number;
+    title: string;
+    quantity: number;
+    unitPrice: number;
+    total: number;
+    id?: string | null;
+  }[];
+  subtotal: number;
+  surcharge: number;
+  total: number;
+  mercadoPagoOrderId?: string | null;
+  externalReference?: string | null;
+  /**
+   * Cada cambio de estado queda registrado con su origen.
+   */
+  events?:
+    | {
+        at: string;
+        type: string;
+        detail?: string | null;
+        id?: string | null;
+      }[]
+    | null;
+  /**
+   * No se le muestran al cliente.
+   */
+  notes?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "users".
  */
 export interface User {
@@ -293,6 +344,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'categories';
         value: number | Category;
+      } | null)
+    | ({
+        relationTo: 'orders';
+        value: number | Order;
       } | null)
     | ({
         relationTo: 'media';
@@ -389,6 +444,44 @@ export interface CategoriesSelect<T extends boolean = true> {
   tone?: T;
   description?: T;
   order?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "orders_select".
+ */
+export interface OrdersSelect<T extends boolean = true> {
+  number?: T;
+  status?: T;
+  paymentMethod?: T;
+  emailSent?: T;
+  customerName?: T;
+  customerEmail?: T;
+  lines?:
+    | T
+    | {
+        code?: T;
+        title?: T;
+        quantity?: T;
+        unitPrice?: T;
+        total?: T;
+        id?: T;
+      };
+  subtotal?: T;
+  surcharge?: T;
+  total?: T;
+  mercadoPagoOrderId?: T;
+  externalReference?: T;
+  events?:
+    | T
+    | {
+        at?: T;
+        type?: T;
+        detail?: T;
+        id?: T;
+      };
+  notes?: T;
   updatedAt?: T;
   createdAt?: T;
 }

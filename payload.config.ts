@@ -7,6 +7,7 @@ import { buildConfig } from 'payload';
 import sharp from 'sharp';
 import { Categories } from '@/collections/Categories';
 import { Media } from '@/collections/Media';
+import { Orders } from '@/collections/Orders';
 import { Products } from '@/collections/Products';
 import { Users } from '@/collections/Users';
 
@@ -21,10 +22,9 @@ function required(name: string) {
 }
 
 export default buildConfig({
-  // Las colecciones de pedidos y de actualizaciones de precio llegan en las
-  // fases 3 y 4, con la forma que dicte el trabajo de checkout. Crearlas ahora
-  // sería adivinar el esquema.
-  collections: [Products, Categories, Media, Users],
+  // La colección de actualizaciones de precio llega en la fase 4, con el
+  // asistente que la va a llenar.
+  collections: [Products, Categories, Orders, Media, Users],
   admin: {
     user: Users.slug,
     meta: { titleSuffix: '· Boutique del Este' },
@@ -34,6 +34,10 @@ export default buildConfig({
   routes: { api: '/api/payload' },
   db: postgresAdapter({
     pool: { connectionString: required('DATABASE_URI') },
+    // Sin esto, en desarrollo Payload sincroniza el esquema por su cuenta y la
+    // base local termina distinta de la que producen las migraciones. Todo
+    // cambio de esquema pasa por `npm run payload migrate:create`.
+    push: false,
   }),
   editor: lexicalEditor(),
   secret: required('PAYLOAD_SECRET'),

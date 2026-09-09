@@ -80,16 +80,35 @@ ahora hay que declararlas en el entorno.
 - `SMTP_USER` y `SMTP_PASS`
 - `ORDER_FROM_EMAIL`: dirección desde la cual se envían los comprobantes
 - `ORDER_COPY_EMAIL`: correo de Freddy que recibe una copia privada de cada orden
-- `ORDER_DATA_DIR`: carpeta persistente donde se conserva el último número emitido
 
-Ejemplo recomendado para la numeración:
+La numeración correlativa la lleva una secuencia de PostgreSQL, no un archivo en
+disco. Ya no hace falta una carpeta persistente ni `ORDER_DATA_DIR`.
+
+**Si la tienda ya emitió órdenes antes de esta versión**, hay que adelantar la
+secuencia al último número usado ANTES de recibir pedidos nuevos, o se repetirán:
 
 ```bash
-sudo mkdir -p /var/lib/boutiquedeleste
-sudo chown -R USUARIO_DE_LA_APP:USUARIO_DE_LA_APP /var/lib/boutiquedeleste
+psql "$DATABASE_URI" -c "SELECT setval('order_number_seq', 123);"   # 123 = último N.º emitido
 ```
 
-La carpeta elegida no debe borrarse durante las actualizaciones. La primera orden será la `0001` y las siguientes continuarán correlativamente.
+Si es una instalación nueva, no hay nada que hacer: la primera orden será la `0001`.
+
+## Conciliación de pagos
+
+Los webhooks se pierden: una caída o un reintento agotado deja una orden pagada
+figurando como pendiente. Un cron diario vuelve a preguntarle a Mercado Pago:
+
+```bash
+# crontab del usuario de la aplicación
+30 3 * * * cd /ruta/al/proyecto && npm run orders:reconcile >> /var/log/boutique-reconcile.log 2>&1
+```
+
+## Pedidos
+
+Cada pedido queda guardado en la base con sus líneas a precio congelado y su
+historial de estados, y se ve en `/admin`. El comprobante por correo se envía
+**después** de guardar: si el SMTP falla, la venta no se pierde y el pedido queda
+marcado como «comprobante no enviado» en el panel.
 
 ## Dominio
 
