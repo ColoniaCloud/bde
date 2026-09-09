@@ -1,10 +1,10 @@
 import type { MetadataRoute } from 'next';
-import { catalogLastUpdatedAt } from '@/app/catalog-data';
-import { categories, products } from '@/lib/catalog';
+import { getAllProductCodes, getCategories } from '@/lib/products';
 import { SITE_URL } from '@/lib/site';
 
-export default function sitemap(): MetadataRoute.Sitemap {
-  const lastModified = new Date(catalogLastUpdatedAt);
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const [categories, codes] = await Promise.all([getCategories(), getAllProductCodes()]);
+  const lastModified = new Date();
 
   return [
     { url: SITE_URL, lastModified, changeFrequency: 'daily', priority: 1 },
@@ -20,8 +20,8 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: 'weekly' as const,
       priority: 0.8,
     })),
-    ...products.map((product) => ({
-      url: `${SITE_URL}/productos/${product.sku}`,
+    ...codes.map((code) => ({
+      url: `${SITE_URL}/productos/${code}`,
       lastModified,
       changeFrequency: 'weekly' as const,
       priority: 0.7,

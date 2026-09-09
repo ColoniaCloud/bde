@@ -2,9 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import nodemailer from 'nodemailer';
-import { products } from '@/lib/catalog';
 import { serverEnv } from '@/lib/env.server';
-import type { CheckoutItemInput } from '@/lib/mercado-pago';
+import type { CheckoutItemInput, ProductLookup } from '@/lib/mercado-pago';
 
 type PaymentMethod = 'whatsapp' | 'mercado-pago';
 
@@ -14,6 +13,7 @@ type CreatePurchaseOrderInput = {
   items: CheckoutItemInput[];
   paymentMethod: PaymentMethod;
   surcharge?: number;
+  lookup: ProductLookup;
 };
 
 type OrderLine = {
@@ -63,17 +63,21 @@ function escapeHtml(value: string) {
   })[character] || character);
 }
 
-export function getOrderLines(items: CheckoutItemInput[]) {
+export async function getOrderLines(items: CheckoutItemInput[], lookup: ProductLookup) {
   if (!Array.isArray(items) || items.length === 0 || items.length > 50) {
     throw new OrderReceiptError('La bolsa está vacía o contiene demasiados productos.', 400);
   }
 
-  return items.map(({ id, quantity }) => {
+  for (const { id, quantity } of items) {
     if (!Number.isInteger(id) || !Number.isInteger(quantity) || quantity < 1 || quantity > 20) {
       throw new OrderReceiptError('La cantidad de uno de los productos no es válida.', 400);
     }
+  }
 
-    const product = products.find((item) => item.id === id);
+  const found = await lookup(items.map((item) => item.id));
+
+  return items.map(({ id, quantity }) => {
+    const product = found.get(id);
     if (!product) throw new OrderReceiptError('Uno de los productos ya no está disponible.', 400);
 
     return {
@@ -196,7 +200,7 @@ export async function createPurchaseOrder(input: CreatePurchaseOrderInput) {
     throw new OrderReceiptError('Ingresá un correo válido para recibir la orden de compra.', 400);
   }
 
-  const lines = getOrderLines(input.items);
+  const lines = await getOrderLines(input.items, input.lookup);
   const subtotal = lines.reduce((total, line) => total + line.total, 0);
   const surcharge = Math.max(0, input.surcharge || 0);
   const smtp = smtpConfiguration();

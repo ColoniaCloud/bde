@@ -1,4 +1,3 @@
-import { products } from '@/lib/catalog';
 import { serverEnv } from '@/lib/env.server';
 import { MERCADO_PAGO_SURCHARGE_PERCENT, mercadoPagoSurcharge } from '@/lib/pricing';
 
@@ -8,6 +7,14 @@ export type CheckoutItemInput = {
   id: number;
   quantity: number;
 };
+
+/**
+ * Busca los productos del pedido. Se inyecta en lugar de importarse para que la
+ * validación siga siendo una función pura y testeable sin base de datos; las
+ * rutas le pasan la implementación que consulta Postgres.
+ */
+export type PricedProduct = { brand: string; name: string; price: number };
+export type ProductLookup = (codes: number[]) => Promise<Map<number, PricedProduct>>;
 
 type MercadoPagoOrder = {
   id: string;
@@ -41,17 +48,23 @@ export function getSiteUrl() {
   throw new MercadoPagoError('Falta configurar la dirección pública de la tienda.', 503);
 }
 
-export function buildOrderItems(input: CheckoutItemInput[]) {
+export async function buildOrderItems(input: CheckoutItemInput[], lookup: ProductLookup) {
   if (!Array.isArray(input) || input.length === 0 || input.length > 50) {
     throw new MercadoPagoError('La bolsa está vacía o contiene demasiados productos.', 400);
   }
 
-  return input.map(({ id, quantity }) => {
+  for (const { id, quantity } of input) {
     if (!Number.isInteger(id) || !Number.isInteger(quantity) || quantity < 1 || quantity > 20) {
       throw new MercadoPagoError('La cantidad de uno de los productos no es válida.', 400);
     }
+  }
 
-    const product = products.find((item) => item.id === id);
+  // Los precios salen siempre del servidor: lo que manda el navegador es
+  // únicamente qué producto y cuántas unidades.
+  const found = await lookup(input.map((item) => item.id));
+
+  return input.map(({ id, quantity }) => {
+    const product = found.get(id);
     if (!product) throw new MercadoPagoError('Uno de los productos ya no está disponible.', 400);
 
     return {
@@ -84,8 +97,12 @@ async function mercadoPagoRequest(path: string, init?: RequestInit) {
   return payload;
 }
 
-export async function createMercadoPagoOrder(itemsInput: CheckoutItemInput[], payerEmail: string) {
-  const productItems = buildOrderItems(itemsInput);
+export async function createMercadoPagoOrder(
+  itemsInput: CheckoutItemInput[],
+  payerEmail: string,
+  lookup: ProductLookup,
+) {
+  const productItems = await buildOrderItems(itemsInput, lookup);
   const subtotal = productItems.reduce((total, item) => total + Number(item.total_amount), 0);
   const surcharge = mercadoPagoSurcharge(subtotal);
   const items = [

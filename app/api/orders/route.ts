@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createPurchaseOrder, OrderReceiptError } from '@/lib/order-receipts';
+import { databaseProductLookup } from '@/lib/product-lookup';
 import type { CheckoutItemInput } from '@/lib/mercado-pago';
 
 export const runtime = 'nodejs';
@@ -35,6 +36,7 @@ export async function POST(request: Request) {
       customerEmail: body.customerEmail || '',
       items: body.items || [],
       paymentMethod: 'whatsapp',
+      lookup: databaseProductLookup,
     });
 
     return NextResponse.json({ orderNumber: order.number });

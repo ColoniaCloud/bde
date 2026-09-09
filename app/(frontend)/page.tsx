@@ -1,84 +1,40 @@
-'use client';
-
-import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useAuth } from '@/components/auth-provider';
+import { HomeFilters } from '@/components/home-filters';
 import { ProductCard } from '@/components/product-card';
-import { ProductImage } from '@/components/product-image';
 import { StoreFooter } from '@/components/store-footer';
 import { Icon, StoreHeader } from '@/components/store-header';
-import { useStore } from '@/components/store-provider';
-import { categories, currency, products } from '@/lib/catalog';
+import { SuggestionsPanel } from '@/components/suggestions-panel';
+import { getCategories, listProducts, PAGE_SIZE } from '@/lib/products';
 
-const PAGE_SIZE = 24;
+type Props = {
+  searchParams: Promise<{ q?: string; categoria?: string; pagina?: string }>;
+};
 
-// «Luz roja» es una categoría de consulta: tiene ficha propia pero ningún
-// producto cargado, así que no corresponde ofrecerla como filtro del catálogo.
-const filterableCategories = categories.filter((category) =>
-  products.some((product) => product.category === category.name),
-);
-
-function scrollToProducts() {
-  document.querySelector('#productos')?.scrollIntoView({ behavior: 'smooth' });
+/** Conserva el filtro y la búsqueda al cambiar de página. */
+function productsHref(params: { q?: string; categoria?: string; pagina?: number }) {
+  const search = new URLSearchParams();
+  if (params.q) search.set('q', params.q);
+  if (params.categoria) search.set('categoria', params.categoria);
+  if (params.pagina && params.pagina > 1) search.set('pagina', String(params.pagina));
+  const query = search.toString();
+  return `/${query ? `?${query}` : ''}#productos`;
 }
 
-export default function Home() {
-  const { user, signInWithGoogle } = useAuth();
-  const { cart, favorites, cartCount, openCart } = useStore();
-  const [query, setQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('Todos');
-  const [page, setPage] = useState(1);
+export default async function Home({ searchParams }: Props) {
+  const { q, categoria, pagina } = await searchParams;
+  const page = Math.max(1, Number(pagina) || 1);
 
-  useEffect(() => {
-    const search = new URLSearchParams(window.location.search).get('q');
-    if (search) setQuery(search);
-  }, []);
+  const [categories, { products, total, totalPages }] = await Promise.all([
+    getCategories(),
+    listProducts({ query: q, categorySlug: categoria, page }),
+  ]);
 
-  const filtered = useMemo(() => {
-    const text = query.trim().toLocaleLowerCase('es');
-    return products.filter((product) => {
-      const categoryMatch = selectedCategory === 'Todos' || product.category === selectedCategory;
-      const textMatch = !text
-        || `${product.brand} ${product.name} ${product.category}`.toLocaleLowerCase('es').includes(text);
-      return categoryMatch && textMatch;
-    });
-  }, [query, selectedCategory]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const visibleProducts = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-
-  const suggestionProducts = useMemo(() => {
-    const referenceIds = [...favorites, ...Object.keys(cart).map(Number)];
-    const referenceCategories = products
-      .filter((product) => referenceIds.includes(product.id))
-      .map((product) => product.category);
-    const personalized = products.filter(
-      (product) => referenceCategories.includes(product.category) && !referenceIds.includes(product.id),
-    );
-    const fallback = products.filter((product) => product.discount || product.tag);
-
-    return (personalized.length ? personalized : fallback).slice(0, 3);
-  }, [cart, favorites]);
-
-  const accountName = user?.email?.split('@')[0] || 'tu cuenta';
-
-  function chooseCategory(category: string) {
-    setSelectedCategory(category);
-    setPage(1);
-    window.setTimeout(scrollToProducts, 20);
-  }
-
-  function changePage(next: number) {
-    setPage(next);
-    scrollToProducts();
-  }
-
-  function showEkosProducts() {
-    setQuery('Ekos');
-    setSelectedCategory('Todos');
-    setPage(1);
-    window.setTimeout(scrollToProducts, 20);
-  }
+  const selected = categoria ? categories.find((item) => item.slug === categoria) : undefined;
+  const heading = q
+    ? `Resultados para “${q}”`
+    : selected
+      ? selected.name
+      : 'Catálogo completo';
 
   return (
     <main>
@@ -96,7 +52,7 @@ export default function Home() {
           <p>perfumería y cuidado personal · Uruguay</p>
           <h1>Productos originales,<br /><em>cerca de vos.</em></h1>
           <span>Perfumes, cuidado personal y regalos con precios en pesos uruguayos. Enviamos en un máximo de 48 horas en Maldonado y Punta del Este.</span>
-          <button onClick={scrollToProducts}>ver catálogo</button>
+          <Link href="/#productos">ver catálogo</Link>
         </div>
         <div className="hero-stamp" aria-hidden="true"><span>DEL</span><strong>ESTE</strong></div>
       </section>
@@ -111,7 +67,7 @@ export default function Home() {
       <section className="category-section section-shell">
         <div className="section-heading">
           <div><p>comprá por categoría</p><h2>¿Qué estás buscando?</h2></div>
-          <button onClick={() => chooseCategory('Todos')}>ver todo <span>→</span></button>
+          <Link href="/#productos">ver todo <span>→</span></Link>
         </div>
         <div className="category-grid">
           {categories.map((category) => (
@@ -126,74 +82,38 @@ export default function Home() {
 
       <section id="productos" className="products-section section-shell">
         <div className="section-heading products-heading">
-          <div>
-            <p>{filtered.length} productos</p>
-            <h2>{query ? `Resultados para “${query}”` : selectedCategory === 'Todos' ? 'Catálogo completo' : selectedCategory}</h2>
-          </div>
-          <div className="filter-pills" aria-label="Filtrar productos">
-            {['Todos', ...filterableCategories.map((category) => category.name)].map((category) => (
-              <button
-                key={category}
-                className={selectedCategory === category ? 'active' : ''}
-                onClick={() => { setSelectedCategory(category); setPage(1); }}
-              >
-                {category}
-              </button>
-            ))}
-          </div>
+          <div><p>{total} productos</p><h2>{heading}</h2></div>
+          <HomeFilters categories={categories} selected={categoria} query={q} />
         </div>
 
-        {filtered.length ? (
+        {products.length ? (
           <div className="product-grid">
-            {visibleProducts.map((product) => <ProductCard product={product} key={product.id} />)}
+            {products.map((product) => <ProductCard product={product} key={product.code} />)}
           </div>
         ) : (
           <div className="empty-state">
             <span>⌕</span>
             <h3>No encontramos productos</h3>
             <p>Probá con otra búsqueda o mirá todas las categorías.</p>
-            <button onClick={() => { setQuery(''); setSelectedCategory('Todos'); setPage(1); }}>ver todos</button>
+            <Link href="/#productos">ver todos</Link>
           </div>
         )}
 
-        {filtered.length > PAGE_SIZE && (
+        {total > PAGE_SIZE && (
           <nav className="catalog-pagination" aria-label="Páginas del catálogo">
-            <button disabled={page === 1} onClick={() => changePage(Math.max(1, page - 1))}>← anterior</button>
+            {page > 1
+              ? <Link href={productsHref({ q, categoria, pagina: page - 1 })}>← anterior</Link>
+              : <span className="disabled">← anterior</span>}
             <span>Página {page} de {totalPages}</span>
-            <button disabled={page === totalPages} onClick={() => changePage(Math.min(totalPages, page + 1))}>siguiente →</button>
+            {page < totalPages
+              ? <Link href={productsHref({ q, categoria, pagina: page + 1 })}>siguiente →</Link>
+              : <span className="disabled">siguiente →</span>}
           </nav>
         )}
         <p className="demo-prices">Precios en pesos uruguayos. Stock y precio final sujetos a confirmación.</p>
       </section>
 
-      <section className="story-banner section-shell">
-        <div className="story-art"><span>boutique del este</span><b>Originales</b></div>
-        <div className="story-copy suggestions-copy">
-          <p>{user ? `para ${accountName}` : 'sugerencias para vos'}</p>
-          <h2>{user ? 'Elegidos según tu recorrida.' : 'Entrá y descubrí ideas para tu próxima compra.'}</h2>
-          <span>
-            {user
-              ? 'Tomamos como referencia tus favoritos y tu bolsa para acercarte productos de la misma línea.'
-              : 'Podés entrar con Google para que Boutique recuerde tu cuenta y te muestre una selección más cercana a lo que mirás.'}
-          </span>
-          <div className="suggestion-grid" aria-label="Sugerencias de productos">
-            {suggestionProducts.map((product) => (
-              <article key={product.id}>
-                <ProductImage src={product.image} alt={product.name} loading="lazy" />
-                <div>
-                  <span>{product.brand}</span>
-                  <strong>{product.name}</strong>
-                  <small>{currency.format(product.price)}</small>
-                </div>
-                <Link href={`/productos/${product.sku}`}>ver</Link>
-              </article>
-            ))}
-          </div>
-          {user
-            ? <a href="#productos">seguir viendo productos</a>
-            : <button onClick={() => void signInWithGoogle()}>ingresar con Google</button>}
-        </div>
-      </section>
+      <SuggestionsPanel />
 
       <section id="ekos-info" className="ekos-info section-shell" aria-labelledby="ekos-title">
         <div className="ekos-intro">
@@ -206,16 +126,7 @@ export default function Home() {
           <article><b>02</b><h3>Tratamiento para el cabello</h3><p>Líneas pensadas para nutrir, fortalecer, reparar y acompañar distintas necesidades capilares.</p></article>
           <article><b>03</b><h3>Repuestos y consumo consciente</h3><p>Muchos productos cuentan con repuesto, una alternativa que utiliza menos envase y permite continuar la rutina.</p></article>
         </div>
-        <button onClick={showEkosProducts}>ver productos Ekos del catálogo</button>
-      </section>
-
-      <section className="newsletter service-callout">
-        <div>
-          <p>pedido por WhatsApp</p>
-          <h2>Armá tu bolsa y envianos el pedido</h2>
-          <span>Confirmamos la disponibilidad y coordinamos el envío en un máximo de 48 horas en Maldonado o Punta del Este.</span>
-        </div>
-        <button onClick={openCart}>ver mi bolsa ({cartCount})</button>
+        <Link href={productsHref({ q: 'Ekos' })}>ver productos Ekos del catálogo</Link>
       </section>
 
       <StoreFooter />
