@@ -34,6 +34,13 @@ const schema = z.object({
   MERCADOPAGO_ACCESS_TOKEN: blankAsAbsent(z.string().min(1).optional()),
   MERCADOPAGO_WEBHOOK_SECRET: blankAsAbsent(z.string().min(1).optional()),
 
+  // Asistente de precios. Si falta la clave, la carga de un PDF avisa en lugar
+  // de romper: el resto de la tienda no depende de esto.
+  GROQ_API_KEY: blankAsAbsent(z.string().min(1).optional()),
+  GROQ_MODEL: blankAsAbsent(z.string().min(1).optional()),
+  // Sólo para apuntar a un proxy o a un simulador en pruebas.
+  GROQ_BASE_URL: blankAsAbsent(z.url().optional()),
+
   SMTP_HOST: blankAsAbsent(z.string().min(1).optional()),
   SMTP_PORT: blankAsAbsent(z.coerce.number().int().min(1).max(65535).default(587)),
   SMTP_SECURE: z.preprocess((value) => value === 'true', z.boolean()),

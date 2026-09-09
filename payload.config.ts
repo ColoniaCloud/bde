@@ -8,6 +8,7 @@ import sharp from 'sharp';
 import { Categories } from '@/collections/Categories';
 import { Media } from '@/collections/Media';
 import { Orders } from '@/collections/Orders';
+import { PriceUpdates } from '@/collections/PriceUpdates';
 import { Products } from '@/collections/Products';
 import { Users } from '@/collections/Users';
 
@@ -22,9 +23,7 @@ function required(name: string) {
 }
 
 export default buildConfig({
-  // La colección de actualizaciones de precio llega en la fase 4, con el
-  // asistente que la va a llenar.
-  collections: [Products, Categories, Orders, Media, Users],
+  collections: [Products, Categories, Orders, PriceUpdates, Media, Users],
   admin: {
     user: Users.slug,
     meta: { titleSuffix: '· Boutique del Este' },

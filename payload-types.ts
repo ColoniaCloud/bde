@@ -70,6 +70,7 @@ export interface Config {
     products: Product;
     categories: Category;
     orders: Order;
+    'price-updates': PriceUpdate;
     media: Media;
     users: User;
     'payload-kv': PayloadKv;
@@ -82,6 +83,7 @@ export interface Config {
     products: ProductsSelect<false> | ProductsSelect<true>;
     categories: CategoriesSelect<false> | CategoriesSelect<true>;
     orders: OrdersSelect<false> | OrdersSelect<true>;
+    'price-updates': PriceUpdatesSelect<false> | PriceUpdatesSelect<true>;
     media: MediaSelect<false> | MediaSelect<true>;
     users: UsersSelect<false> | UsersSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
@@ -287,6 +289,55 @@ export interface Order {
   createdAt: string;
 }
 /**
+ * Subí el PDF de la lista, revisá la propuesta y aplicá los cambios que correspondan.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "price-updates".
+ */
+export interface PriceUpdate {
+  id: number;
+  /**
+   * Poné «Aplicar» y guardá para escribir los precios de las filas tildadas. No hay vuelta atrás automática.
+   */
+  status: 'pending' | 'analyzing' | 'review' | 'apply' | 'applied' | 'failed';
+  /**
+   * Tildalo sólo si el PDF trae TODO el catálogo. Si está tildado, los productos que no figuren se proponen como sin stock. Con una lista parcial dejalo sin tildar.
+   */
+  completeList?: boolean | null;
+  summary?: string | null;
+  error?: string | null;
+  /**
+   * Destildá lo que no quieras aplicar. Las filas marcadas «requiere atención» llegan sin tildar a propósito.
+   */
+  rows?:
+    | {
+        approved?: boolean | null;
+        code?: number | null;
+        name?: string | null;
+        action?: ('update' | 'create' | 'missing' | 'discarded') | null;
+        currentPrice?: number | null;
+        newPrice?: number | null;
+        changePercent?: number | null;
+        requiresAttention?: boolean | null;
+        note?: string | null;
+        id?: string | null;
+      }[]
+    | null;
+  appliedAt?: string | null;
+  appliedCount?: number | null;
+  updatedAt: string;
+  createdAt: string;
+  url?: string | null;
+  thumbnailURL?: string | null;
+  filename?: string | null;
+  mimeType?: string | null;
+  filesize?: number | null;
+  width?: number | null;
+  height?: number | null;
+  focalX?: number | null;
+  focalY?: number | null;
+}
+/**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "users".
  */
@@ -348,6 +399,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'orders';
         value: number | Order;
+      } | null)
+    | ({
+        relationTo: 'price-updates';
+        value: number | PriceUpdate;
       } | null)
     | ({
         relationTo: 'media';
@@ -484,6 +539,43 @@ export interface OrdersSelect<T extends boolean = true> {
   notes?: T;
   updatedAt?: T;
   createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "price-updates_select".
+ */
+export interface PriceUpdatesSelect<T extends boolean = true> {
+  status?: T;
+  completeList?: T;
+  summary?: T;
+  error?: T;
+  rows?:
+    | T
+    | {
+        approved?: T;
+        code?: T;
+        name?: T;
+        action?: T;
+        currentPrice?: T;
+        newPrice?: T;
+        changePercent?: T;
+        requiresAttention?: T;
+        note?: T;
+        id?: T;
+      };
+  appliedAt?: T;
+  appliedCount?: T;
+  updatedAt?: T;
+  createdAt?: T;
+  url?: T;
+  thumbnailURL?: T;
+  filename?: T;
+  mimeType?: T;
+  filesize?: T;
+  width?: T;
+  height?: T;
+  focalX?: T;
+  focalY?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema

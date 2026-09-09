@@ -93,6 +93,40 @@ psql "$DATABASE_URI" -c "SELECT setval('order_number_seq', 123);"   # 123 = últ
 
 Si es una instalación nueva, no hay nada que hacer: la primera orden será la `0001`.
 
+## Asistente de precios
+
+Cada tanto llega un PDF con la lista de precios. El circuito es de dos tiempos y
+**nada se aplica solo**:
+
+1. Subir el PDF en `/admin → Actualizaciones de precios`. El asistente lo lee y
+   arma una propuesta.
+2. Revisar la propuesta y poner el estado en «Aplicar». Recién ahí se escriben
+   los precios de las filas tildadas.
+
+Las filas con una variación mayor al ±25 %, los productos que no están en el
+catálogo y las lecturas dudosas **llegan sin tildar a propósito**: hay que
+marcarlas a mano una por una.
+
+El tilde **«Es la lista completa»** sólo va si el PDF trae todo el catálogo. Con
+él marcado, los productos que no figuren se proponen como sin stock; con una
+lista parcial dejalo sin tildar o vas a ver cientos de filas de ruido.
+
+Requiere `GROQ_API_KEY`. Sin ella, subir un PDF deja el registro en estado
+«Falló» con el motivo, y el resto de la tienda sigue funcionando igual.
+
+**El PDF tiene que tener texto seleccionable.** Un escaneo sin capa de texto se
+rechaza con un mensaje explícito en lugar de devolver una propuesta vacía.
+
+### Recordatorio cada 20 días
+
+```bash
+# crontab del usuario de la aplicación
+0 9 * * * cd /ruta/al/proyecto && npm run prices:remind >> /var/log/boutique-precios.log 2>&1
+```
+
+Sólo avisa por correo; no toca precios. El umbral se ajusta con
+`PRICE_REMINDER_DAYS`.
+
 ## Conciliación de pagos
 
 Los webhooks se pierden: una caída o un reintento agotado deja una orden pagada

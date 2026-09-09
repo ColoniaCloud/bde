@@ -21,7 +21,8 @@
     "payload:types": "payload generate:types",
     "catalog:seed": "payload run scripts/seed-catalog.ts",
     "admin:create": "payload run scripts/create-admin.ts",
-    "orders:reconcile": "payload run scripts/reconcile-orders.ts"
+    "orders:reconcile": "NODE_OPTIONS=--conditions=react-server payload run scripts/reconcile-orders.ts",
+    "prices:remind": "NODE_OPTIONS=--conditions=react-server payload run scripts/price-reminder.ts"
   },
   "dependencies": {
     "@base-ui/react": "1.7.0",
@@ -41,6 +42,7 @@
     "server-only": "^0.0.1",
     "sharp": "^0.35.4",
     "tailwind-merge": "3.6.0",
+    "unpdf": "^1.8.1",
     "zod": "^4.5.4"
   },
   "devDependencies": {
