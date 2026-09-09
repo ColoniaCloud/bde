@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { serverEnv } from '@/lib/env.server';
 import { getMercadoPagoOrder } from '@/lib/mercado-pago';
 import { verifyWebhookSignature } from '@/lib/webhook-signature';
 
@@ -10,7 +11,7 @@ export async function POST(request: Request) {
   const dataId = url.searchParams.get('data.id') || body.data?.id || '';
 
   const valid = verifyWebhookSignature({
-    secret: process.env.MERCADOPAGO_WEBHOOK_SECRET,
+    secret: serverEnv().MERCADOPAGO_WEBHOOK_SECRET,
     signatureHeader: request.headers.get('x-signature'),
     requestId: request.headers.get('x-request-id'),
     dataId,

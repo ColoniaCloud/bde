@@ -19,7 +19,19 @@ En producción conviene ejecutar `npm start` con PM2 o systemd y publicar la apl
 
 Copiar `.env.example` a `.env.production` y completar los valores reales. Ese archivo no se sube a GitHub.
 
-Para enviar las órdenes de compra se necesitan:
+Las variables se validan al arrancar con Zod. Una variable presente pero malformada
+(un `SMTP_PORT` que no es un puerto, un `ORDER_COPY_EMAIL` que no es un correo)
+detiene la aplicación con un mensaje que dice cuál es. Las opcionales pueden faltar:
+la funcionalidad que dependa de ellas responde 503 en lugar de romper la tienda.
+
+### Obligatorias
+
+`NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` son necesarias
+**en tiempo de build**, no solo al ejecutar: se incrustan en el bundle del navegador.
+Si faltan, `npm run build` falla. Antes eran valores fijos dentro de `lib/supabase.ts`;
+ahora hay que declararlas en el entorno.
+
+### Para las órdenes de compra
 
 - `SMTP_HOST`, `SMTP_PORT` y `SMTP_SECURE`
 - `SMTP_USER` y `SMTP_PASS`

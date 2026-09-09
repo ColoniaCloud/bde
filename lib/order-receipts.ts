@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import nodemailer from 'nodemailer';
 import { products } from '@/lib/catalog';
+import { serverEnv } from '@/lib/env.server';
 import type { CheckoutItemInput } from '@/lib/mercado-pago';
 
 type PaymentMethod = 'whatsapp' | 'mercado-pago';
@@ -85,7 +86,7 @@ export function getOrderLines(items: CheckoutItemInput[]) {
 }
 
 function orderDataDirectory() {
-  return process.env.ORDER_DATA_DIR?.trim() || path.join(process.cwd(), 'data');
+  return serverEnv().ORDER_DATA_DIR?.trim() || path.join(process.cwd(), 'data');
 }
 
 async function reserveOrderNumber() {
@@ -135,21 +136,22 @@ async function reserveOrderNumber() {
 }
 
 function smtpConfiguration() {
-  const host = process.env.SMTP_HOST?.trim();
-  const user = process.env.SMTP_USER?.trim();
-  const pass = process.env.SMTP_PASS;
-  const from = process.env.ORDER_FROM_EMAIL?.trim() || user;
-  const copy = process.env.ORDER_COPY_EMAIL?.trim();
-  const port = Number(process.env.SMTP_PORT || 587);
+  const env = serverEnv();
+  const host = env.SMTP_HOST?.trim();
+  const user = env.SMTP_USER?.trim();
+  const pass = env.SMTP_PASS;
+  const from = env.ORDER_FROM_EMAIL?.trim() || user;
+  const copy = env.ORDER_COPY_EMAIL?.trim();
+  const port = env.SMTP_PORT;
 
-  if (!host || !user || !pass || !from || !copy || !Number.isInteger(port)) {
+  if (!host || !user || !pass || !from || !copy) {
     throw new OrderReceiptError('El envío de comprobantes por correo todavía no está configurado.', 503);
   }
 
   return {
     host,
     port,
-    secure: process.env.SMTP_SECURE === 'true' || port === 465,
+    secure: env.SMTP_SECURE || port === 465,
     auth: { user, pass },
     from,
     copy,

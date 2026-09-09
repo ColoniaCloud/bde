@@ -1,12 +1,14 @@
 import { createClient } from '@supabase/supabase-js';
+import { publicEnv } from '@/lib/env.public';
 
-const supabaseUrl = 'https://rjnfjoctbbfzreygfwgv.supabase.co';
-const supabasePublishableKey = 'sb_publishable_dO0MxuqFc6daS2sKCDJOjg_Lpi-8rYy';
-
-export const supabase = createClient(supabaseUrl, supabasePublishableKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
+export const supabase = createClient(
+  publicEnv.NEXT_PUBLIC_SUPABASE_URL,
+  publicEnv.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+  {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+    },
   },
-});
+);

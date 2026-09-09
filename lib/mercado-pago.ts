@@ -1,4 +1,5 @@
 import { products } from '@/lib/catalog';
+import { serverEnv } from '@/lib/env.server';
 import { MERCADO_PAGO_SURCHARGE_PERCENT, mercadoPagoSurcharge } from '@/lib/pricing';
 
 const MERCADO_PAGO_API = 'https://api.mercadopago.com';
@@ -25,7 +26,7 @@ export class MercadoPagoError extends Error {
 }
 
 export function getAccessToken() {
-  const token = process.env.MERCADOPAGO_ACCESS_TOKEN;
+  const token = serverEnv().MERCADOPAGO_ACCESS_TOKEN;
   if (!token) {
     throw new MercadoPagoError('Mercado Pago todavía no está habilitado. Podés enviar el pedido por WhatsApp.', 503);
   }
@@ -33,13 +34,10 @@ export function getAccessToken() {
 }
 
 export function getSiteUrl() {
-  const configuredUrl = process.env.SITE_URL?.trim();
+  const configuredUrl = serverEnv().SITE_URL?.trim();
   if (configuredUrl) return configuredUrl.replace(/\/$/, '');
 
-  const vercelUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
-  if (vercelUrl) return `https://${vercelUrl.replace(/^https?:\/\//, '').replace(/\/$/, '')}`;
-
-  if (process.env.NODE_ENV !== 'production') return 'http://localhost:3000';
+  if (serverEnv().NODE_ENV !== 'production') return 'http://localhost:3000';
   throw new MercadoPagoError('Falta configurar la dirección pública de la tienda.', 503);
 }
 
