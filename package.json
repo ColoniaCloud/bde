@@ -10,13 +10,17 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "payload": "payload",
     "lint": "oxlint",
     "format": "oxfmt",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "prices:export": "node scripts/manage-prices.mjs export",
-    "prices:import": "node scripts/manage-prices.mjs import"
+    "prices:import": "node scripts/manage-prices.mjs import",
+    "payload:types": "payload generate:types",
+    "catalog:seed": "payload run scripts/seed-catalog.ts",
+    "admin:create": "payload run scripts/create-admin.ts"
   },
   "dependencies": {
     "@base-ui/react": "1.7.0",
@@ -41,6 +45,7 @@
     "react-resizable-panels": "4.5.8",
     "recharts": "3.8.0",
     "server-only": "^0.0.1",
+    "sharp": "^0.35.4",
     "tailwind-merge": "3.6.0",
     "zod": "^4.5.4"
   },

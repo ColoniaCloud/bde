@@ -17,7 +17,27 @@ jobs:
     name: Lint, tipos, tests y build
     runs-on: ubuntu-latest
 
+    # Payload necesita una base para compilar y para correr las migraciones,
+    # así que el CI levanta una de verdad en lugar de simularla.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: boutique_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
     env:
+      DATABASE_URI: postgres://postgres:postgres@localhost:5432/boutique_ci
+      # Secreto descartable, sólo para que el build arranque en CI.
+      PAYLOAD_SECRET: ci-secret-no-usar-en-produccion-000000000000
       # El build incrusta estas dos en el bundle del cliente, así que sin ellas
       # falla. Son valores públicos de ejemplo: alcanzan para compilar y no
       # tocan ningún proyecto real de Supabase.
@@ -44,5 +64,13 @@ jobs:
       - name: Tests
         run: npm test
 
+      - name: Migraciones
+        run: npm run payload migrate
+
       - name: Build
         run: npm run build
+
+      # Prueba que la carga del catálogo funciona de punta a punta contra una
+      # base vacía: si el esquema y el archivo se desincronizan, se ve acá.
+      - name: Cargar el catálogo
+        run: npm run catalog:seed

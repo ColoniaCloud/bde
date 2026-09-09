@@ -10,7 +10,14 @@ async function loadEnv(vars: Record<string, string | undefined>) {
   return serverEnv;
 }
 
+// Payload exige estas dos, así que todo caso parte de valores válidos.
+const required = {
+  DATABASE_URI: 'postgres://user@localhost:5432/db',
+  PAYLOAD_SECRET: 'x'.repeat(32),
+};
+
 const clean = {
+  ...required,
   SMTP_HOST: undefined,
   SMTP_PORT: undefined,
   SMTP_USER: undefined,
@@ -56,6 +63,23 @@ describe('serverEnv', () => {
     expect((await loadEnv({ ...clean, SMTP_SECURE: 'true' }))().SMTP_SECURE).toBe(true);
     expect((await loadEnv({ ...clean, SMTP_SECURE: 'false' }))().SMTP_SECURE).toBe(false);
     expect((await loadEnv({ ...clean, SMTP_SECURE: '1' }))().SMTP_SECURE).toBe(false);
+  });
+
+  describe('exige lo que Payload necesita para arrancar', () => {
+    it('sin DATABASE_URI no arranca', async () => {
+      const serverEnv = await loadEnv({ ...clean, DATABASE_URI: undefined });
+      expect(() => serverEnv()).toThrow(/DATABASE_URI/);
+    });
+
+    it('sin PAYLOAD_SECRET no arranca', async () => {
+      const serverEnv = await loadEnv({ ...clean, PAYLOAD_SECRET: undefined });
+      expect(() => serverEnv()).toThrow(/PAYLOAD_SECRET/);
+    });
+
+    it('rechaza un PAYLOAD_SECRET corto: firma las sesiones del panel', async () => {
+      const serverEnv = await loadEnv({ ...clean, PAYLOAD_SECRET: 'corto' });
+      expect(() => serverEnv()).toThrow(/PAYLOAD_SECRET/);
+    });
   });
 
   describe('falla al arrancar si algo está presente pero malformado', () => {

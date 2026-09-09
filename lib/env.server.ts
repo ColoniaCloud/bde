@@ -23,6 +23,12 @@ const blankAsAbsent = <T extends z.ZodType>(inner: T) =>
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 
+  // Payload no arranca sin estas dos, así que no son opcionales como el resto.
+  DATABASE_URI: z.string().min(1, { error: 'falta DATABASE_URI (la cadena de conexión a PostgreSQL)' }),
+  PAYLOAD_SECRET: z.string().min(32, {
+    error: 'PAYLOAD_SECRET debe tener al menos 32 caracteres: firma las sesiones del panel',
+  }),
+
   SITE_URL: blankAsAbsent(z.url().optional()),
 
   MERCADOPAGO_ACCESS_TOKEN: blankAsAbsent(z.string().min(1).optional()),
