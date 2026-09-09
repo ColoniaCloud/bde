@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
@@ -22,14 +23,14 @@ export default function AuthCallbackPage() {
       router.replace('/');
     }
 
-    finishSignIn();
+    void finishSignIn();
   }, [router]);
 
   return (
     <main className="auth-callback">
-      <a className="payment-wordmark" href="/" aria-label="Boutique del Este, inicio">
+      <Link className="payment-wordmark" href="/" aria-label="Boutique del Este, inicio">
         Boutique del Este <small>UY</small>
-      </a>
+      </Link>
       <section className="payment-result-card" aria-live="polite">
         <div className="payment-result-icon">✓</div>
         <p>cuenta</p>

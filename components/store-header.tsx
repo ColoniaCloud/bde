@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { AccountButton } from '@/components/account-button';
 import { useStore } from '@/components/store-provider';
@@ -27,8 +27,7 @@ export function StoreHeader() {
   const [menuOpen, setMenuOpen] = useState(false);
   const { cartCount, openCart, showNotice } = useStore();
 
-  function submitSearch(event: FormEvent) {
-    event.preventDefault();
+  function submitSearch() {
     const search = query.trim();
     window.location.href = search ? `/?q=${encodeURIComponent(search)}#productos` : '/#productos';
   }
@@ -38,7 +37,7 @@ export function StoreHeader() {
     <header className="site-header">
       <button className="mobile-menu" aria-label={menuOpen ? 'Cerrar menú' : 'Abrir menú'} aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}>☰</button>
       <Link className="wordmark" href="/" aria-label="Boutique del Este, inicio"><img src="/LOG%20OK.png" alt="Boutique del Este" /></Link>
-      <form className="search" onSubmit={submitSearch} role="search">
+      <form className="search" onSubmit={(event) => { event.preventDefault(); submitSearch(); }} role="search">
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="¿qué estás buscando hoy?" aria-label="Buscar productos" />
         <button aria-label="Buscar"><Icon>⌕</Icon></button>
       </form>
