@@ -62,7 +62,7 @@ function escapeHtml(value: string) {
   })[character] || character);
 }
 
-function getOrderLines(items: CheckoutItemInput[]) {
+export function getOrderLines(items: CheckoutItemInput[]) {
   if (!Array.isArray(items) || items.length === 0 || items.length > 50) {
     throw new OrderReceiptError('La bolsa está vacía o contiene demasiados productos.', 400);
   }
