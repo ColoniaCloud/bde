@@ -37,3 +37,6 @@ next-env.d.ts
 /public/media/
 private/
 *.tsbuildinfo
+e2e-results/
+playwright-report/
+test-results/

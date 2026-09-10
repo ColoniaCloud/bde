@@ -7,22 +7,44 @@ directamente. No hay build alternativo para Cloudflare Workers ni para Vercel.
 
 ## Base de datos
 
-El catálogo y el panel de administración viven en PostgreSQL 16.
+El catálogo, los pedidos y el panel viven en PostgreSQL 16.
 
-```bash
-# Definí POSTGRES_PASSWORD en un .env junto al docker-compose.yml
-docker compose up -d
+La aplicación no impone cómo se provee: alcanza con una cadena de conexión en
+`DATABASE_URI`. Puede ser un PostgreSQL instalado en el mismo servidor o uno
+gestionado aparte.
+
+Si lo instalás vos, dos recomendaciones:
+
+- Que escuche sólo en `127.0.0.1` si la aplicación corre en el mismo servidor.
+  La base no debe ser alcanzable desde internet.
+- Usuario propio para la aplicación, no `postgres`.
+
+```sql
+CREATE DATABASE boutique;
+CREATE USER boutique WITH PASSWORD '...';
+GRANT ALL PRIVILEGES ON DATABASE boutique TO boutique;
 ```
 
-Sólo la base corre en Docker; la aplicación va por fuera, con PM2 o systemd. El
-puerto se publica en `127.0.0.1` a propósito: la base no debe verse desde internet.
-
-**Hacé backups desde el primer día.** Un volcado diario y una restauración probada
-de verdad, porque acá pasan a vivir el catálogo y, desde la fase 3, los pedidos:
+**Hacé respaldos desde el primer día**, porque acá viven el catálogo y los
+pedidos. Hay dos scripts listos:
 
 ```bash
-docker exec boutique-db pg_dump -U boutique boutique | gzip > backup-$(date +%F).sql.gz
+./scripts/backup.sh                      # volcado + archivos subidos
+./scripts/restore.sh archivo.sql.gz      # restauración
 ```
+
+El respaldo verifica que el volcado no haya quedado truncado, y borra los que
+superen `RETENTION_DAYS` (30 por defecto). La restauración devuelve también la
+secuencia de numeración de órdenes, así que los números no se repiten.
+
+Cron diario sugerido:
+
+```bash
+0 4 * * * cd /ruta/al/proyecto && DATABASE_URI='...' ./scripts/backup.sh >> /var/log/boutique-backup.log 2>&1
+```
+
+> Probá una restauración de verdad antes de necesitarla. Un respaldo que nunca
+> se restauró no es un respaldo.
 
 ## Instalación
 

@@ -74,3 +74,30 @@ jobs:
       # base vacía: si el esquema y el archivo se desincronizan, se ve acá.
       - name: Cargar el catálogo
         run: npm run catalog:seed
+
+      - name: Crear el usuario del panel para las pruebas
+        run: npm run admin:create
+        env:
+          ADMIN_EMAIL: e2e@ejemplo.com
+          ADMIN_PASSWORD: clave-solo-para-ci-12345
+          ADMIN_NAME: CI
+
+      - name: Instalar Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Pruebas de extremo a extremo
+        run: |
+          npm start &
+          npx wait-on http://127.0.0.1:3000 --timeout 90000
+          npx playwright test
+        env:
+          E2E_ADMIN_EMAIL: e2e@ejemplo.com
+          E2E_ADMIN_PASSWORD: clave-solo-para-ci-12345
+
+      - name: Guardar el informe si algo falló
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
