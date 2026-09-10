@@ -16,6 +16,9 @@ const GROQ_DEFAULT_BASE = 'https://api.groq.com/openai/v1';
  * El identificador se lee del entorno porque Groq depreca modelos seguido
  * (llama-4-scout quedó obsoleto en junio de 2026). Conviene confirmarlo contra
  * GET /openai/v1/models antes de desplegar.
+ *
+ * Verificado el 2026-09-10: qwen3.6-27b y qwen3.8-27b están disponibles y los
+ * dos soportan json_schema, así que son intercambiables por configuración.
  */
 const DEFAULT_MODEL = 'qwen/qwen3.6-27b';
 
