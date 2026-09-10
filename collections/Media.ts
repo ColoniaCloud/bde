@@ -1,4 +1,5 @@
 import type { CollectionConfig } from 'payload';
+import { isAdmin, isPanel } from '@/lib/access';
 
 /** Imágenes propias. Hoy el catálogo enlaza al CDN de Natura; la fase 2 las trae acá. */
 export const Media: CollectionConfig = {
@@ -6,9 +7,9 @@ export const Media: CollectionConfig = {
   admin: { group: 'Catálogo' },
   access: {
     read: () => true,
-    create: ({ req }) => Boolean(req.user),
-    update: ({ req }) => Boolean(req.user),
-    delete: ({ req }) => req.user?.role === 'admin',
+    create: isPanel,
+    update: isPanel,
+    delete: isAdmin,
   },
   upload: {
     staticDir: 'public/media',

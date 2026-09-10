@@ -6,6 +6,7 @@ import { es } from '@payloadcms/translations/languages/es';
 import { buildConfig } from 'payload';
 import sharp from 'sharp';
 import { Categories } from '@/collections/Categories';
+import { Customers } from '@/collections/Customers';
 import { Media } from '@/collections/Media';
 import { Orders } from '@/collections/Orders';
 import { PriceUpdates } from '@/collections/PriceUpdates';
@@ -23,7 +24,7 @@ function required(name: string) {
 }
 
 export default buildConfig({
-  collections: [Products, Categories, Orders, PriceUpdates, Media, Users],
+  collections: [Products, Categories, Orders, Customers, PriceUpdates, Media, Users],
   admin: {
     user: Users.slug,
     meta: { titleSuffix: '· Boutique del Este' },

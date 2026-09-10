@@ -1,4 +1,5 @@
 import type { CollectionConfig } from 'payload';
+import { isAdmin, isPanel } from '@/lib/access';
 
 /** Las nueve secciones de la tienda. Reemplaza el arreglo fijo de lib/catalog.ts. */
 export const Categories: CollectionConfig = {
@@ -10,9 +11,9 @@ export const Categories: CollectionConfig = {
   },
   access: {
     read: () => true,
-    create: ({ req }) => Boolean(req.user),
-    update: ({ req }) => Boolean(req.user),
-    delete: ({ req }) => req.user?.role === 'admin',
+    create: isPanel,
+    update: isPanel,
+    delete: isAdmin,
   },
   defaultSort: 'order',
   fields: [

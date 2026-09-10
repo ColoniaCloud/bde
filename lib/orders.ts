@@ -16,6 +16,8 @@ type CreateOrderInput = {
   paymentMethod: PaymentMethod;
   surcharge?: number;
   lookup: ProductLookup;
+  /** Sólo si el cliente estaba con sesión iniciada. */
+  customerId?: number;
 };
 
 const payloadClient = () => getPayload({ config: configPromise });
@@ -70,6 +72,7 @@ export async function createOrder(input: CreateOrderInput) {
       subtotal,
       surcharge,
       total: subtotal + surcharge,
+      customer: input.customerId ?? null,
       emailSent: false,
       events: [{ at: createdAt.toISOString(), type: 'created', detail: `Pedido por ${input.paymentMethod}` }],
     },

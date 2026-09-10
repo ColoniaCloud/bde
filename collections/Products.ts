@@ -1,4 +1,5 @@
 import type { CollectionConfig } from 'payload';
+import { isAdmin, isPanel } from '@/lib/access';
 
 /**
  * El catálogo. Los campos replican el tipo `Product` de app/catalog-data.ts para
@@ -19,9 +20,9 @@ export const Products: CollectionConfig = {
   },
   access: {
     read: () => true,
-    create: ({ req }) => Boolean(req.user),
-    update: ({ req }) => Boolean(req.user),
-    delete: ({ req }) => req.user?.role === 'admin',
+    create: isPanel,
+    update: isPanel,
+    delete: isAdmin,
   },
   fields: [
     {

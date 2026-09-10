@@ -26,18 +26,22 @@ Cambiar `PAYLOAD_SECRET` cierra todas las sesiones abiertas del panel.
 
 ---
 
-## 2 · Tienda · obligatorias
+## 2 · Ingreso con Google · opcional
 
 | Variable | Valor |
 |---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | URL del proyecto de Supabase |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Clave publicable de Supabase |
+| `GOOGLE_CLIENT_ID` | ID de cliente OAuth de Google Cloud |
+| `GOOGLE_CLIENT_SECRET` | Su secreto |
 
-Resuelven el ingreso con Google. Se necesitan **al compilar**, no sólo al
-ejecutar: si faltan, `npm run build` falla.
+En Google Cloud → APIs y servicios → Credenciales, agregá esta URI de
+redirección autorizada:
 
-Son públicas por diseño: viajan al navegador. No pongas claves secretas con el
-prefijo `NEXT_PUBLIC_`.
+```
+https://boutiquedeleste.com/api/auth/google/callback
+```
+
+Sin estas dos, la página de cuenta lo dice y no ofrece el botón. El resto de la
+tienda funciona igual: comprar nunca requirió cuenta.
 
 ---
 
@@ -137,18 +141,21 @@ npm run admin:create
 | Falta | Consecuencia |
 |---|---|
 | `DATABASE_URI` · `PAYLOAD_SECRET` | **No arranca** |
-| `NEXT_PUBLIC_SUPABASE_*` | **No compila** |
 | `SITE_URL` en producción | Mercado Pago responde 503 |
 | Bloque SMTP | Sin comprobantes; el pedido se guarda igual |
 | Bloque Mercado Pago | Sin botón de pago; WhatsApp sigue |
+| `GOOGLE_CLIENT_*` | Sin ingreso con Google; comprar sigue igual |
 | `GROQ_API_KEY` | Sin asistente de precios |
 | Tareas programadas | Se usan los valores por defecto |
 
 ## Nota de seguridad
 
-Sólo las dos `NEXT_PUBLIC_*` llegan al navegador. Verificado sobre el bundle
-compilado: `PAYLOAD_SECRET`, la contraseña de la base, `GROQ_API_KEY` y el host
-SMTP no aparecen en `.next/static`.
+**Ninguna variable llega al navegador.** Desde que se retiró Supabase no queda
+ninguna `NEXT_PUBLIC_*`: toda la configuración es del servidor. La sesión del
+cliente viaja en una cookie `httpOnly` que el servidor verifica.
+
+`lib/env.server.ts` está marcado con `server-only`: si un componente de cliente
+lo importara por error, el build falla en lugar de filtrar la configuración.
 
 ## Ver también
 

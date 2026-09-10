@@ -1,4 +1,5 @@
 import { serverEnv } from '@/lib/env.server';
+import { getSiteUrl as resolveSiteUrl, SiteUrlError } from '@/lib/site-url';
 import { MERCADO_PAGO_SURCHARGE_PERCENT, mercadoPagoSurcharge } from '@/lib/pricing';
 
 const MERCADO_PAGO_API = 'https://api.mercadopago.com';
@@ -41,18 +42,14 @@ export function getAccessToken() {
 }
 
 export function getSiteUrl() {
-  const configuredUrl = serverEnv().SITE_URL?.trim();
-  if (configuredUrl) return configuredUrl.replace(/\/$/, '');
-
-  if (serverEnv().NODE_ENV !== 'production') return 'http://localhost:3000';
-  throw new MercadoPagoError('Falta configurar la dirección pública de la tienda.', 503);
+  try {
+    return resolveSiteUrl();
+  } catch (error) {
+    if (error instanceof SiteUrlError) throw new MercadoPagoError(error.message, 503);
+    throw error;
+  }
 }
 
-/**
- * Verifica que Mercado Pago esté configurado, antes de reservar un número de
- * orden. Sin esto, una tienda mal configurada deja huecos en la numeración
- * correlativa por pedidos que nunca podrían pagarse.
- */
 export function assertMercadoPagoReady() {
   getAccessToken();
   getSiteUrl();

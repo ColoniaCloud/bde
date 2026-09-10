@@ -38,11 +38,7 @@ jobs:
       DATABASE_URI: postgres://postgres:postgres@localhost:5432/boutique_ci
       # Secreto descartable, sólo para que el build arranque en CI.
       PAYLOAD_SECRET: ci-secret-no-usar-en-produccion-000000000000
-      # El build incrusta estas dos en el bundle del cliente, así que sin ellas
-      # falla. Son valores públicos de ejemplo: alcanzan para compilar y no
-      # tocan ningún proyecto real de Supabase.
-      NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
-      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder
+      SITE_URL: http://127.0.0.1:3000
 
     steps:
       - uses: actions/checkout@v5

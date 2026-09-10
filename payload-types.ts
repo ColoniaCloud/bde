@@ -63,6 +63,7 @@ export type SupportedTimezones =
 
 export interface Config {
   auth: {
+    customers: CustomerAuthOperations;
     users: UserAuthOperations;
   };
   blocks: {};
@@ -70,6 +71,7 @@ export interface Config {
     products: Product;
     categories: Category;
     orders: Order;
+    customers: Customer;
     'price-updates': PriceUpdate;
     media: Media;
     users: User;
@@ -83,6 +85,7 @@ export interface Config {
     products: ProductsSelect<false> | ProductsSelect<true>;
     categories: CategoriesSelect<false> | CategoriesSelect<true>;
     orders: OrdersSelect<false> | OrdersSelect<true>;
+    customers: CustomersSelect<false> | CustomersSelect<true>;
     'price-updates': PriceUpdatesSelect<false> | PriceUpdatesSelect<true>;
     media: MediaSelect<false> | MediaSelect<true>;
     users: UsersSelect<false> | UsersSelect<true>;
@@ -101,10 +104,28 @@ export interface Config {
   widgets: {
     collections: CollectionsWidget;
   };
-  user: User;
+  user: Customer | User;
   jobs: {
     tasks: unknown;
     workflows: unknown;
+  };
+}
+export interface CustomerAuthOperations {
+  forgotPassword: {
+    email: string;
+    password: string;
+  };
+  login: {
+    email: string;
+    password: string;
+  };
+  registerFirstUser: {
+    email: string;
+    password: string;
+  };
+  unlock: {
+    email: string;
+    password: string;
   };
 }
 export interface UserAuthOperations {
@@ -255,6 +276,10 @@ export interface Order {
   customerName: string;
   customerEmail: string;
   /**
+   * Sólo si el cliente estaba con sesión iniciada al comprar.
+   */
+  customer?: (number | null) | Customer;
+  /**
    * Precios congelados al momento de la compra.
    */
   lines: {
@@ -287,6 +312,46 @@ export interface Order {
   notes?: string | null;
   updatedAt: string;
   createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "customers".
+ */
+export interface Customer {
+  id: number;
+  name?: string | null;
+  provider?: ('password' | 'google') | null;
+  googleId?: string | null;
+  /**
+   * Códigos de producto. Se sincronizan desde el navegador al ingresar.
+   */
+  favorites?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  updatedAt: string;
+  createdAt: string;
+  email: string;
+  resetPasswordToken?: string | null;
+  resetPasswordExpiration?: string | null;
+  salt?: string | null;
+  hash?: string | null;
+  loginAttempts?: number | null;
+  lockUntil?: string | null;
+  sessions?:
+    | {
+        id: string;
+        createdAt?: string | null;
+        expiresAt: string;
+      }[]
+    | null;
+  password?: string | null;
+  collection: 'customers';
 }
 /**
  * Subí el PDF de la lista, revisá la propuesta y aplicá los cambios que correspondan.
@@ -401,6 +466,10 @@ export interface PayloadLockedDocument {
         value: number | Order;
       } | null)
     | ({
+        relationTo: 'customers';
+        value: number | Customer;
+      } | null)
+    | ({
         relationTo: 'price-updates';
         value: number | PriceUpdate;
       } | null)
@@ -413,10 +482,15 @@ export interface PayloadLockedDocument {
         value: number | User;
       } | null);
   globalSlug?: string | null;
-  user: {
-    relationTo: 'users';
-    value: number | User;
-  };
+  user:
+    | {
+        relationTo: 'customers';
+        value: number | Customer;
+      }
+    | {
+        relationTo: 'users';
+        value: number | User;
+      };
   updatedAt: string;
   createdAt: string;
 }
@@ -426,10 +500,15 @@ export interface PayloadLockedDocument {
  */
 export interface PayloadPreference {
   id: number;
-  user: {
-    relationTo: 'users';
-    value: number | User;
-  };
+  user:
+    | {
+        relationTo: 'customers';
+        value: number | Customer;
+      }
+    | {
+        relationTo: 'users';
+        value: number | User;
+      };
   key?: string | null;
   value?:
     | {
@@ -513,6 +592,7 @@ export interface OrdersSelect<T extends boolean = true> {
   emailSent?: T;
   customerName?: T;
   customerEmail?: T;
+  customer?: T;
   lines?:
     | T
     | {
@@ -539,6 +619,32 @@ export interface OrdersSelect<T extends boolean = true> {
   notes?: T;
   updatedAt?: T;
   createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "customers_select".
+ */
+export interface CustomersSelect<T extends boolean = true> {
+  name?: T;
+  provider?: T;
+  googleId?: T;
+  favorites?: T;
+  updatedAt?: T;
+  createdAt?: T;
+  email?: T;
+  resetPasswordToken?: T;
+  resetPasswordExpiration?: T;
+  salt?: T;
+  hash?: T;
+  loginAttempts?: T;
+  lockUntil?: T;
+  sessions?:
+    | T
+    | {
+        id?: T;
+        createdAt?: T;
+        expiresAt?: T;
+      };
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema

@@ -20,7 +20,7 @@ type Suggestion = {
  * navegador. Se piden al servidor en lugar de recorrer un catálogo embebido.
  */
 export function SuggestionsPanel() {
-  const { user, signInWithGoogle } = useAuth();
+  const { customer } = useAuth();
   const { cart, favorites } = useStore();
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
 
@@ -38,18 +38,18 @@ export function SuggestionsPanel() {
     return () => controller.abort();
   }, [codes]);
 
-  const accountName = user?.email?.split('@')[0] || 'tu cuenta';
+  const accountName = customer?.email?.split('@')[0] || 'tu cuenta';
 
   return (
     <section className="story-banner section-shell">
       <div className="story-art"><span>boutique del este</span><b>Originales</b></div>
       <div className="story-copy suggestions-copy">
-        <p>{user ? `para ${accountName}` : 'sugerencias para vos'}</p>
-        <h2>{user ? 'Elegidos según tu recorrida.' : 'Entrá y descubrí ideas para tu próxima compra.'}</h2>
+        <p>{customer ? `para ${accountName}` : 'sugerencias para vos'}</p>
+        <h2>{customer ? 'Elegidos según tu recorrida.' : 'Entrá y descubrí ideas para tu próxima compra.'}</h2>
         <span>
-          {user
+          {customer
             ? 'Tomamos como referencia tus favoritos y tu bolsa para acercarte productos de la misma línea.'
-            : 'Podés entrar con Google para que Boutique recuerde tu cuenta y te muestre una selección más cercana a lo que mirás.'}
+            : 'Si entrás a tu cuenta, Boutique recuerda tus pedidos y tus favoritos entre dispositivos.'}
         </span>
         {suggestions.length > 0 && (
           <div className="suggestion-grid" aria-label="Sugerencias de productos">
@@ -66,9 +66,9 @@ export function SuggestionsPanel() {
             ))}
           </div>
         )}
-        {user
+        {customer
           ? <Link href="/#productos">seguir viendo productos</Link>
-          : <button onClick={() => void signInWithGoogle()}>ingresar con Google</button>}
+          : <Link href="/cuenta">ingresar a mi cuenta</Link>}
       </div>
     </section>
   );

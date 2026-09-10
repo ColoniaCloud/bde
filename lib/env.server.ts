@@ -41,6 +41,13 @@ const schema = z.object({
   // Sólo para apuntar a un proxy o a un simulador en pruebas.
   GROQ_BASE_URL: blankAsAbsent(z.url().optional()),
 
+  // Ingreso con Google. Es aditivo: sin credenciales, la tienda no ofrece el
+  // botón y el ingreso con correo y contraseña sigue funcionando.
+  GOOGLE_CLIENT_ID: blankAsAbsent(z.string().min(1).optional()),
+  GOOGLE_CLIENT_SECRET: blankAsAbsent(z.string().min(1).optional()),
+  // Sólo para apuntar a un simulador en pruebas.
+  GOOGLE_BASE_URL: blankAsAbsent(z.url().optional()),
+
   SMTP_HOST: blankAsAbsent(z.string().min(1).optional()),
   SMTP_PORT: blankAsAbsent(z.coerce.number().int().min(1).max(65535).default(587)),
   SMTP_SECURE: z.preprocess((value) => value === 'true', z.boolean()),

@@ -1,4 +1,5 @@
 import type { CollectionConfig } from 'payload';
+import { isAdmin, isAdminField, isPanel } from '@/lib/access';
 
 /**
  * Quienes entran al panel. `admin` puede todo; `editor` mantiene el catálogo
@@ -13,11 +14,14 @@ export const Users: CollectionConfig = {
     group: 'Administración',
   },
   access: {
-    read: ({ req }) => Boolean(req.user),
-    create: ({ req }) => req.user?.role === 'admin',
-    update: ({ req, id }) =>
-      req.user?.role === 'admin' || (Boolean(req.user) && req.user?.id === id),
-    delete: ({ req }) => req.user?.role === 'admin',
+    read: isPanel,
+    create: isAdmin,
+    // Un administrador edita a cualquiera; el resto, sólo su propia ficha.
+    update: ({ req, id }) => {
+      if (req.user?.collection !== 'users') return false;
+      return req.user.role === 'admin' || req.user.id === id;
+    },
+    delete: isAdmin,
   },
   fields: [
     {
@@ -38,7 +42,7 @@ export const Users: CollectionConfig = {
       ],
       access: {
         // Nadie se asciende a sí mismo.
-        update: ({ req }) => req.user?.role === 'admin',
+        update: isAdminField,
       },
     },
   ],

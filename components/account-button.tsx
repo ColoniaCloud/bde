@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import Link from 'next/link';
 import { useAuth } from '@/components/auth-provider';
 
 function accountLabel(email?: string) {
@@ -9,40 +9,24 @@ function accountLabel(email?: string) {
 }
 
 export function AccountButton() {
-  const { user, loading, signInWithGoogle, signOut } = useAuth();
-  const [busy, setBusy] = useState(false);
+  const { customer, loading } = useAuth();
 
-  async function handleAccount() {
-    if (busy || loading) return;
-    setBusy(true);
-
-    try {
-      if (user) {
-        await signOut();
-        setBusy(false);
-      } else {
-        await signInWithGoogle();
-      }
-    } catch (error) {
-      console.error(error);
-      window.alert('No pudimos iniciar sesión con Google. Probalo de nuevo en unos minutos.');
-      setBusy(false);
-    }
+  if (loading) {
+    return (
+      <span className="account-button" aria-hidden="true">
+        <span className="icon">·</span><span>cuenta</span>
+      </span>
+    );
   }
 
-  const signedIn = Boolean(user);
-  const label = signedIn ? accountLabel(user?.email) : 'ingresar';
-
   return (
-    <button
+    <Link
       className="account-button"
-      aria-label={signedIn ? `Cuenta ${user?.email}. Cerrar sesión` : 'Ingresar con Google'}
-      disabled={busy || loading}
-      onClick={handleAccount}
-      title={signedIn ? 'Cerrar sesión' : 'Ingresar con Google'}
+      href="/cuenta"
+      aria-label={customer ? `Cuenta de ${customer.email}` : 'Ingresar a mi cuenta'}
     >
-      <span aria-hidden="true" className="icon">{signedIn ? '✓' : 'G'}</span>
-      <span>{loading ? 'cuenta' : label}</span>
-    </button>
+      <span aria-hidden="true" className="icon">{customer ? '✓' : '◍'}</span>
+      <span>{customer ? accountLabel(customer.email) : 'ingresar'}</span>
+    </Link>
   );
 }

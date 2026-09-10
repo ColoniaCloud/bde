@@ -19,11 +19,16 @@ export const Orders: CollectionConfig = {
     listSearchableFields: ['number', 'customerName', 'customerEmail'],
   },
   access: {
-    // Los pedidos no son públicos: sólo se ven desde el panel.
-    read: ({ req }) => Boolean(req.user),
+    read: ({ req }) => {
+      // El panel ve todos los pedidos.
+      if (req.user?.collection === 'users') return true;
+      // Un cliente ve únicamente los suyos.
+      if (req.user?.collection === 'customers') return { customer: { equals: req.user.id } };
+      return false;
+    },
     // Se crean desde el servidor con la Local API, que no pasa por este control.
     create: () => false,
-    update: ({ req }) => Boolean(req.user),
+    update: ({ req }) => req.user?.collection === 'users',
     delete: () => false,
   },
   defaultSort: '-createdAt',
@@ -85,6 +90,17 @@ export const Orders: CollectionConfig = {
         { name: 'customerName', type: 'text', label: 'Cliente', required: true, admin: { width: '50%' } },
         { name: 'customerEmail', type: 'email', label: 'Correo', required: true, index: true, admin: { width: '50%' } },
       ],
+    },
+    {
+      name: 'customer',
+      type: 'relationship',
+      relationTo: 'customers',
+      label: 'Cuenta',
+      index: true,
+      admin: {
+        readOnly: true,
+        description: 'Sólo si el cliente estaba con sesión iniciada al comprar.',
+      },
     },
     {
       name: 'lines',

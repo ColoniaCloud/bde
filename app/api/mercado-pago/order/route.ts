@@ -1,4 +1,7 @@
+import { headers as nextHeaders } from 'next/headers';
 import { NextResponse } from 'next/server';
+import configPromise from '@payload-config';
+import { getPayload } from 'payload';
 import { logError } from '@/lib/logger';
 import { assertMercadoPagoReady, buildOrderItems, createMercadoPagoOrder, MercadoPagoError, type CheckoutItemInput } from '@/lib/mercado-pago';
 import { normalizeCustomer, OrderError } from '@/lib/order-lines';
@@ -47,6 +50,7 @@ export async function POST(request: Request) {
       paymentMethod: 'mercado-pago',
       surcharge: mercadoPagoSurcharge(subtotal),
       lookup: databaseProductLookup,
+      customerId: await signedInCustomerId(),
     });
 
     try {
@@ -69,5 +73,16 @@ export async function POST(request: Request) {
     const status = known ? error.status : 500;
     const message = known ? error.message : 'No pudimos iniciar el pago. Intentá nuevamente.';
     return NextResponse.json({ message }, { status });
+  }
+}
+
+/** Vincula el pedido a la cuenta si hay sesión. Comprar sin cuenta sigue siendo válido. */
+async function signedInCustomerId() {
+  try {
+    const payload = await getPayload({ config: configPromise });
+    const { user } = await payload.auth({ headers: await nextHeaders() });
+    return user?.collection === 'customers' ? user.id : undefined;
+  } catch {
+    return undefined;
   }
 }

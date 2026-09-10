@@ -1,4 +1,5 @@
 import type { CollectionConfig } from 'payload';
+import { isAdmin, isPanel } from '@/lib/access';
 
 /**
  * Actualizaciones de precio a partir de un PDF.
@@ -43,10 +44,10 @@ export const PriceUpdates: CollectionConfig = {
     description: 'Subí el PDF de la lista, revisá la propuesta y aplicá los cambios que correspondan.',
   },
   access: {
-    read: ({ req }) => Boolean(req.user),
-    create: ({ req }) => Boolean(req.user),
-    update: ({ req }) => Boolean(req.user),
-    delete: ({ req }) => req.user?.role === 'admin',
+    read: isPanel,
+    create: isPanel,
+    update: isPanel,
+    delete: isAdmin,
   },
   upload: {
     staticDir: 'private/price-updates',
