@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { logError } from '@/lib/logger';
 import { normalizeCustomer, OrderError } from '@/lib/order-lines';
 import { createOrder } from '@/lib/orders';
 import { databaseProductLookup } from '@/lib/product-lookup';
@@ -37,6 +38,9 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ orderNumber: order.number });
   } catch (error) {
+    // Un OrderError es culpa del pedido y ya se le explica al cliente;
+    // cualquier otra cosa es un fallo nuestro y tiene que dejar rastro.
+    if (!(error instanceof OrderError)) logError('no se pudo crear el pedido por WhatsApp', error);
     const status = error instanceof OrderError ? error.status : 500;
     const message = error instanceof OrderError
       ? error.message

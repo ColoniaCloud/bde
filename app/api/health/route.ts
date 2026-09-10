@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import configPromise from '@payload-config';
 import { getPayload } from 'payload';
+import { logError } from '@/lib/logger';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -32,9 +33,10 @@ export async function GET() {
       },
       { status: healthy ? 200 : 503 },
     );
-  } catch {
-    // Sin detalle del error: el mensaje de una excepción de base puede revelar
-    // el host o el usuario de conexión.
+  } catch (error) {
+    // El detalle va al log, no a la respuesta: el mensaje de una excepción de
+    // base puede revelar el host o el usuario de conexión.
+    logError('health check: la base no responde', error);
     return NextResponse.json(
       { status: 'error', database: 'unreachable', checkedInMs: Date.now() - started },
       { status: 503 },

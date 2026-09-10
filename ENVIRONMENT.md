@@ -115,6 +115,7 @@ y son intercambiables sin tocar código.
 | `PRICE_REMINDER_DAYS` | `20` | Días sin actualizar precios antes de avisar |
 | `BACKUP_DIR` | `/var/backups/boutiquedeleste` | Dónde se guardan los respaldos |
 | `RETENTION_DAYS` | `30` | Cuántos días se conservan |
+| `LOG_LEVEL` | `info` | `debug`, `info`, `warn` o `error` |
 
 ---
 

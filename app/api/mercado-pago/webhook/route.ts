@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { serverEnv } from '@/lib/env.server';
+import { logError, logWarning } from '@/lib/logger';
 import { getMercadoPagoOrder } from '@/lib/mercado-pago';
 import { orderStatusFrom } from '@/lib/order-lines';
 import { recordPaymentResult } from '@/lib/orders';
@@ -20,6 +21,9 @@ export async function POST(request: Request) {
   });
 
   if (!valid) {
+    // Una firma inválida puede ser un error de configuración o un intento de
+    // falsificar un pago: conviene que quede registrado.
+    logWarning('webhook de Mercado Pago con firma inválida', { dataId });
     return NextResponse.json({ received: false }, { status: 401 });
   }
 
@@ -34,9 +38,11 @@ export async function POST(request: Request) {
     await recordPaymentResult(dataId, status, `${order.status} · ${order.status_detail}`);
 
     return NextResponse.json({ received: true });
-  } catch {
+  } catch (error) {
     // Una firma válida debe recibir 200 para evitar reintentos infinitos; la
     // conciliación diaria vuelve a mirar las órdenes que quedaron pendientes.
+    // Pero el fallo tiene que quedar registrado, no desaparecer.
+    logError('no se pudo procesar el webhook de Mercado Pago', error, { dataId });
     return NextResponse.json({ received: true });
   }
 }

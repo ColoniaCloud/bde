@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { logError } from '@/lib/logger';
 import { assertMercadoPagoReady, buildOrderItems, createMercadoPagoOrder, MercadoPagoError, type CheckoutItemInput } from '@/lib/mercado-pago';
 import { normalizeCustomer, OrderError } from '@/lib/order-lines';
 import { appendEvent, attachMercadoPagoOrder, createOrder } from '@/lib/orders';
@@ -64,6 +65,7 @@ export async function POST(request: Request) {
     }
   } catch (error) {
     const known = error instanceof MercadoPagoError || error instanceof OrderError;
+    if (!known) logError('no se pudo iniciar el pago con Mercado Pago', error);
     const status = known ? error.status : 500;
     const message = known ? error.message : 'No pudimos iniciar el pago. Intentá nuevamente.';
     return NextResponse.json({ message }, { status });
