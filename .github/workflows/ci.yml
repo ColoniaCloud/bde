@@ -60,14 +60,28 @@ jobs:
       - name: Tests
         run: npm test
 
+      # El panel carga sus componentes desde app/(payload)/admin/importMap.js, que
+      # Payload genera. Si queda viejo, el panel pierde partes en silencio: no
+      # falla el build ni las pruebas, simplemente no se dibuja lo que falta.
+      - name: El mapa de componentes del panel está al día
+        run: |
+          npm run payload generate:importmap
+          git diff --exit-code "app/(payload)/admin/importMap.js" \
+            || { echo "::error::Falta correr 'npm run payload generate:importmap' y commitear el resultado."; exit 1; }
+
       - name: Migraciones
         run: npm run payload migrate
 
       - name: Build
         run: npm run build
 
-      # Prueba que la carga del catálogo funciona de punta a punta contra una
-      # base vacía: si el esquema y el archivo se desincronizan, se ve acá.
+      # El catálogo se carga **después** del build, a propósito. Son dos pruebas
+      # en una: que la carga funciona contra una base vacía (si el esquema y el
+      # archivo se desincronizan, se ve acá), y que ninguna página dependa de
+      # que la base tenga datos al compilar. Lo segundo ya atrapó un error real:
+      # /categoria/[slug] se armaba durante el build y devolvía 500 para toda
+      # categoría que no existiera en ese momento. No mover este paso antes del
+      # build para "arreglar" el CI: se pierde la garantía.
       - name: Cargar el catálogo
         run: npm run catalog:seed
 

@@ -9,10 +9,23 @@ type Props = {
   searchParams: Promise<{ pagina?: string }>;
 };
 
-export async function generateStaticParams() {
-  const categories = await getCategories();
-  return categories.map((category) => ({ slug: category.slug }));
-}
+/**
+ * Esta página se arma en cada pedido, a propósito.
+ *
+ * Tuvo `generateStaticParams`, que la convertía en una página fija armada
+ * durante el build. Dos cosas la rompían:
+ *
+ *  1. Lee `searchParams` para paginar (`?pagina=2`). Una página fija no tiene
+ *     pedido del que sacarlos, así que Next abortaba el render y la categoría
+ *     entera devolvía **500**. Pasaba con cualquier categoría que no se hubiera
+ *     armado durante el build: las creadas después desde el panel, y todas si el
+ *     build corría antes de cargar el catálogo (que es lo que hace el CI).
+ *  2. Aun armándose bien, quedaba congelada: los precios que actualiza el
+ *     asistente cada 20 días y lo que se toca en el panel no se veían hasta el
+ *     próximo despliegue.
+ *
+ * El catálogo vive en la base y cambia; la página tiene que leerlo cada vez.
+ */
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;

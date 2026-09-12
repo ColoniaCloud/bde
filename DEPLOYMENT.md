@@ -1,9 +1,10 @@
-# Publicación en el VPS
+# Publicación
 
 La tienda usa Next.js y requiere Node.js 22.13 o superior.
 
-El VPS es el unico destino de despliegue soportado: `npm run build` y `npm start` usan Next.js
-directamente. No hay build alternativo para Cloudflare Workers ni para Vercel.
+Se publica como un proyecto Node común: `npm run build` y `npm start`, sin Docker
+y sin adaptadores. Sirve tanto un hosting Node administrado como un servidor
+propio. No hay build alternativo para Cloudflare Workers ni para Vercel.
 
 ## Base de datos
 
@@ -58,7 +59,10 @@ npm start
 `payload migrate` es obligatorio en cada publicación que traiga cambios de
 esquema, y hay que correrlo **antes** de `npm start`.
 
-En producción conviene ejecutar `npm start` con PM2 o systemd y publicar la aplicación mediante Nginx con HTTPS.
+Si la aplicación corre en un servidor propio, conviene ejecutar `npm start` con
+PM2 o systemd y publicarla detrás de Nginx con HTTPS. En un hosting Node
+administrado eso lo resuelve la plataforma: alcanza con declarar las variables de
+entorno y el comando de arranque.
 
 ## Primera puesta en marcha
 
@@ -72,8 +76,9 @@ ADMIN_EMAIL=freddy@boutiquedeleste.com ADMIN_PASSWORD='...' ADMIN_NAME='Freddy' 
 
 El panel queda en `/admin`. Los usuarios siguientes se dan de alta desde ahí.
 
-Nginx debe reenviar `/admin` y `/api/payload` a la aplicación como cualquier otra
-ruta. Conviene además limitar `/admin` por IP si el acceso es siempre desde los
+`/admin` y `/api/payload` son rutas de la misma aplicación: no necesitan nada
+aparte. Si hay un Nginx propio adelante, tiene que reenviarlas como a cualquier
+otra; conviene además limitar `/admin` por IP si el acceso es siempre desde los
 mismos lugares.
 
 ## Variables privadas
@@ -91,10 +96,17 @@ la funcionalidad que dependa de ellas responde 503 en lugar de romper la tienda.
 no arranca. `PAYLOAD_SECRET` firma las sesiones del panel —generala con
 `openssl rand -base64 48`— y si la cambiás, se cierran todas las sesiones abiertas.
 
-`NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` son necesarias
-**en tiempo de build**, no solo al ejecutar: se incrustan en el bundle del navegador.
-Si faltan, `npm run build` falla. Antes eran valores fijos dentro de `lib/supabase.ts`;
-ahora hay que declararlas en el entorno.
+No hay ninguna variable que haga falta **en tiempo de build**: `npm run build`
+compila sin base de datos y sin credenciales. Todo se lee al arrancar. Esto vale
+también para el catálogo: ninguna página se arma con los datos que haya al
+compilar, así que un producto o una categoría que se den de alta en el panel se
+ven al instante, sin volver a desplegar.
+
+Tampoco queda ninguna `NEXT_PUBLIC_*`: al retirarse Supabase, el ingreso con
+Google pasó a resolverse en el servidor con `GOOGLE_CLIENT_ID` y
+`GOOGLE_CLIENT_SECRET`, que no llegan al navegador.
+
+La lista completa de variables, por rubro, está en **`ENVIRONMENT.md`**.
 
 ### Para las órdenes de compra
 
@@ -168,4 +180,7 @@ marcado como «comprobante no enviado» en el panel.
 
 ## Dominio
 
-Configurar `SITE_URL=https://boutiquedeleste.com`, el dominio principal y `www.boutiquedeleste.com` en Nginx, y emitir el certificado SSL antes de activar los pagos.
+Configurar `SITE_URL=https://boutiquedeleste.com`, apuntar el dominio principal y
+`www.boutiquedeleste.com` a la aplicación, y tener el certificado SSL emitido
+**antes** de activar los pagos: Mercado Pago no acepta URLs de retorno ni webhooks
+sin HTTPS.

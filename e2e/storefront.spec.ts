@@ -71,3 +71,19 @@ test('un producto inexistente devuelve 404', async ({ page }) => {
   const response = await page.goto('/productos/999999999');
   expect(response?.status()).toBe(404);
 });
+
+/**
+ * El mapa del sitio tiene que salir de la base, no del build.
+ *
+ * El CI compila **antes** de cargar el catálogo, así que si esta página volviera
+ * a armarse durante el build llegaría acá con las cuatro URLs fijas y sin un
+ * solo producto: exactamente lo que vería Google tras un despliegue.
+ */
+test('el mapa del sitio lista el catálogo entero', async ({ page }) => {
+  const response = await page.goto('/sitemap.xml');
+  expect(response?.status()).toBe(200);
+
+  const xml = await response!.text();
+  expect(xml).toContain('/categoria/perfumeria');
+  expect((xml.match(/\/productos\//g) ?? []).length).toBeGreaterThan(100);
+});
