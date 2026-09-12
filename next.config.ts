@@ -24,9 +24,11 @@ const csp = [
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' data: https://fonts.gstatic.com",
   // El catálogo todavía enlaza imágenes al CDN de Natura. El resto son los
-  // píxeles de medición: Clarity manda sus datos como una imagen (c.gif), y
-  // Analytics cae al mismo método cuando no puede usar la conexión directa.
-  "img-src 'self' data: blob: https://production.na01.natura.com https://www.googletagmanager.com https://*.google-analytics.com https://*.clarity.ms",
+  // píxeles de medición: Clarity manda sus datos como una imagen (c.gif) y ese
+  // pedido **redirige** a c.bing.com para sincronizar el identificador, así que
+  // hacen falta los dos. Analytics cae al mismo método cuando no puede usar la
+  // conexión directa.
+  "img-src 'self' data: blob: https://production.na01.natura.com https://www.googletagmanager.com https://*.google-analytics.com https://*.clarity.ms https://c.bing.com",
   // Adónde reportan las mediciones. Analytics usa además un servidor por región
   // (region1.google-analytics.com y similares) y Clarity manda una parte a
   // c.bing.com, de ahí que no alcance con el dominio principal de cada uno.
