@@ -13,7 +13,6 @@
 
 # next.js
 /.next/
-/.vinext/
 /out/
 
 # misc
@@ -30,14 +29,14 @@ yarn-error.log*
 .env*
 !.env.example
 
-# deployment and generated files
-.vercel
+# generated files
 next-env.d.ts
-/dist/
-/.wrangler/
-/outputs/
-/work/
 
-# Secuencia privada de órdenes creada en el servidor
-/data/order-sequence.json
-/data/order-sequence.lock
+
+# Archivos subidos desde el panel: viven en el disco del servidor, no en git
+/public/media/
+private/
+*.tsbuildinfo
+e2e-results/
+playwright-report/
+test-results/

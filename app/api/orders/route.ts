@@ -1,27 +1,23 @@
+import { headers as nextHeaders } from 'next/headers';
 import { NextResponse } from 'next/server';
-import { createPurchaseOrder, OrderReceiptError } from '@/lib/order-receipts';
+import configPromise from '@payload-config';
+import { getPayload } from 'payload';
+import { logError } from '@/lib/logger';
+import { normalizeCustomer, OrderError } from '@/lib/order-lines';
+import { createOrder } from '@/lib/orders';
+import { databaseProductLookup } from '@/lib/product-lookup';
+import { hitRateLimit, requestKey } from '@/lib/rate-limit';
 import type { CheckoutItemInput } from '@/lib/mercado-pago';
 
 export const runtime = 'nodejs';
 
-const attempts = new Map<string, { count: number; expiresAt: number }>();
-
-function isRateLimited(request: Request) {
-  const forwarded = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
-  const key = forwarded || request.headers.get('x-real-ip') || 'unknown';
-  const now = Date.now();
-  const current = attempts.get(key);
-  if (!current || current.expiresAt <= now) {
-    attempts.set(key, { count: 1, expiresAt: now + 10 * 60_000 });
-    return false;
-  }
-  current.count += 1;
-  return current.count > 6;
-}
-
 export async function POST(request: Request) {
-  if (isRateLimited(request)) {
-    return NextResponse.json({ message: 'Realizaste varios intentos. Esperá unos minutos y volvé a probar.' }, { status: 429 });
+  const limit = await hitRateLimit(requestKey(request, 'orders'), 6, 10);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { message: 'Realizaste varios intentos. Esperá unos minutos y volvé a probar.' },
+      { status: 429 },
+    );
   }
 
   try {
@@ -30,17 +26,40 @@ export async function POST(request: Request) {
       customerEmail?: string;
       items?: CheckoutItemInput[];
     };
-    const order = await createPurchaseOrder({
-      customerName: body.customerName || '',
-      customerEmail: body.customerEmail || '',
+    const { customerName, customerEmail } = normalizeCustomer(
+      body.customerName ?? '',
+      body.customerEmail ?? '',
+    );
+
+    const order = await createOrder({
+      customerName,
+      customerEmail,
       items: body.items || [],
       paymentMethod: 'whatsapp',
+      lookup: databaseProductLookup,
+      customerId: await signedInCustomerId(),
     });
 
     return NextResponse.json({ orderNumber: order.number });
   } catch (error) {
-    const status = error instanceof OrderReceiptError ? error.status : 500;
-    const message = error instanceof OrderReceiptError ? error.message : 'No pudimos generar la orden de compra. Intentá nuevamente.';
+    // Un OrderError es culpa del pedido y ya se le explica al cliente;
+    // cualquier otra cosa es un fallo nuestro y tiene que dejar rastro.
+    if (!(error instanceof OrderError)) logError('no se pudo crear el pedido por WhatsApp', error);
+    const status = error instanceof OrderError ? error.status : 500;
+    const message = error instanceof OrderError
+      ? error.message
+      : 'No pudimos generar la orden de compra. Intentá nuevamente.';
     return NextResponse.json({ message }, { status });
+  }
+}
+
+/** Vincula el pedido a la cuenta si hay sesión. Comprar sin cuenta sigue siendo válido. */
+async function signedInCustomerId() {
+  try {
+    const payload = await getPayload({ config: configPromise });
+    const { user } = await payload.auth({ headers: await nextHeaders() });
+    return user?.collection === 'customers' ? user.id : undefined;
+  } catch {
+    return undefined;
   }
 }

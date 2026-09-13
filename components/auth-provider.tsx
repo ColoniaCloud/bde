@@ -1,58 +1,59 @@
 'use client';
 
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import type { User } from '@supabase/supabase-js';
-import { supabase } from '@/lib/supabase';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+
+export type Customer = {
+  id: number;
+  email: string;
+  name?: string | null;
+};
 
 type AuthContextValue = {
-  user: User | null;
+  customer: Customer | null;
   loading: boolean;
-  signInWithGoogle: () => Promise<void>;
+  googleEnabled: boolean;
   signOut: () => Promise<void>;
+  refresh: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+/**
+ * Sesión del cliente.
+ *
+ * Reemplaza al proveedor de Supabase. La diferencia importante: la sesión vive
+ * en una cookie httpOnly que el servidor verifica, así que la cuenta ya no es
+ * sólo una etiqueta en el encabezado.
+ */
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [customer, setCustomer] = useState<Customer | null>(null);
+  const [googleEnabled, setGoogleEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    let mounted = true;
-
-    supabase.auth.getSession().then(({ data }) => {
-      if (!mounted) return;
-      setUser(data.session?.user ?? null);
+  const refresh = useCallback(async () => {
+    try {
+      const response = await fetch('/api/auth/me', { cache: 'no-store' });
+      const data = await response.json() as { customer: Customer | null; googleEnabled: boolean };
+      setCustomer(data.customer);
+      setGoogleEnabled(data.googleEnabled);
+    } catch {
+      setCustomer(null);
+    } finally {
       setLoading(false);
-    });
-
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
-
-    return () => {
-      mounted = false;
-      listener.subscription.unsubscribe();
-    };
+    }
   }, []);
 
-  async function signInWithGoogle() {
-    const redirectTo = `${window.location.origin}/auth/callback`;
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo },
-    });
+  useEffect(() => { void refresh(); }, [refresh]);
 
-    if (error) throw error;
-  }
+  const signOut = useCallback(async () => {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    setCustomer(null);
+  }, []);
 
-  async function signOut() {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
-  }
-
-  const value = useMemo(() => ({ user, loading, signInWithGoogle, signOut }), [user, loading]);
+  const value = useMemo(
+    () => ({ customer, loading, googleEnabled, signOut, refresh }),
+    [customer, loading, googleEnabled, signOut, refresh],
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

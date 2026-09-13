@@ -1,40 +1,48 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
+import { serverEnv } from '@/lib/env.server';
+import { logError, logWarning } from '@/lib/logger';
 import { getMercadoPagoOrder } from '@/lib/mercado-pago';
+import { orderStatusFrom } from '@/lib/order-lines';
+import { recordPaymentResult } from '@/lib/orders';
+import { verifyWebhookSignature } from '@/lib/webhook-signature';
 
 export const runtime = 'nodejs';
-
-function validSignature(request: Request, dataId: string) {
-  const secret = process.env.MERCADOPAGO_WEBHOOK_SECRET;
-  const signature = request.headers.get('x-signature');
-  const requestId = request.headers.get('x-request-id');
-  if (!secret || !signature || !requestId || !dataId) return false;
-
-  const parts = Object.fromEntries(signature.split(',').map((part) => part.trim().split('=', 2)));
-  const timestamp = parts.ts;
-  const receivedHash = parts.v1;
-  if (!timestamp || !receivedHash || !/^[a-f0-9]{64}$/i.test(receivedHash)) return false;
-
-  const manifest = `id:${dataId};request-id:${requestId};ts:${timestamp};`;
-  const expectedHash = createHmac('sha256', secret).update(manifest).digest('hex');
-  return timingSafeEqual(Buffer.from(expectedHash, 'hex'), Buffer.from(receivedHash, 'hex'));
-}
 
 export async function POST(request: Request) {
   const url = new URL(request.url);
   const body = await request.json().catch(() => ({})) as { data?: { id?: string }; type?: string };
   const dataId = url.searchParams.get('data.id') || body.data?.id || '';
 
-  if (!validSignature(request, dataId)) {
+  const valid = verifyWebhookSignature({
+    secret: serverEnv().MERCADOPAGO_WEBHOOK_SECRET,
+    signatureHeader: request.headers.get('x-signature'),
+    requestId: request.headers.get('x-request-id'),
+    dataId,
+  });
+
+  if (!valid) {
+    // Una firma inválida puede ser un error de configuración o un intento de
+    // falsificar un pago: conviene que quede registrado.
+    logWarning('webhook de Mercado Pago con firma inválida', { dataId });
     return NextResponse.json({ received: false }, { status: 401 });
   }
 
   try {
-    // Consultar la order evita confiar en el contenido del webhook para tomar decisiones comerciales.
-    await getMercadoPagoOrder(dataId);
+    // Consultar la order evita confiar en el contenido del webhook para tomar
+    // decisiones comerciales: el payload sólo dice *qué* mirar, no qué pasó.
+    const order = await getMercadoPagoOrder(dataId);
+    const status = orderStatusFrom(order.status, order.status_detail);
+
+    // recordPaymentResult es idempotente: Mercado Pago reintenta, y recibir dos
+    // veces la misma notificación no debe duplicar eventos ni pisar el estado.
+    await recordPaymentResult(dataId, status, `${order.status} · ${order.status_detail}`);
+
     return NextResponse.json({ received: true });
-  } catch {
-    // Una firma válida debe recibir 200 para evitar reintentos infinitos; la order puede consultarse luego.
+  } catch (error) {
+    // Una firma válida debe recibir 200 para evitar reintentos infinitos; la
+    // conciliación diaria vuelve a mirar las órdenes que quedaron pendientes.
+    // Pero el fallo tiene que quedar registrado, no desaparecer.
+    logError('no se pudo procesar el webhook de Mercado Pago', error, { dataId });
     return NextResponse.json({ received: true });
   }
 }

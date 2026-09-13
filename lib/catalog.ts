@@ -1,3 +1,10 @@
+/**
+ * Catálogo semilla, leído del archivo.
+ *
+ * Ya NO lo usa la tienda: desde la fase 2 el storefront lee de la base a través
+ * de lib/products.ts. Esto queda como fuente de la carga inicial
+ * (scripts/seed-catalog.ts) y como datos realistas para los tests.
+ */
 import { products, type Product } from '@/app/catalog-data';
 
 export type { Product };
