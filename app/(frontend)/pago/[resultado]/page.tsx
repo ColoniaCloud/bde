@@ -1,3 +1,4 @@
+import { Check, CircleHelp, Clock3, X } from 'lucide-react';
 import { ClearPaidCart } from '@/components/clear-paid-cart';
 import { getMercadoPagoOrder } from '@/lib/mercado-pago';
 import { findOrderByMercadoPagoId, recordPaymentResult } from '@/lib/orders';
@@ -10,27 +11,27 @@ type PaymentPageProps = {
 
 type ResultType = 'aprobado' | 'pendiente' | 'rechazado' | 'desconocido';
 
-const resultContent: Record<ResultType, { icon: string; eyebrow: string; title: string; description: string }> = {
+const resultContent: Record<ResultType, { icon: typeof Check; eyebrow: string; title: string; description: string }> = {
   aprobado: {
-    icon: '✓',
+    icon: Check,
     eyebrow: 'pago confirmado',
     title: '¡Gracias por tu compra!',
     description: 'Mercado Pago confirmó y acreditó el pago. Nos comunicaremos para coordinar la entrega.',
   },
   pendiente: {
-    icon: '…',
+    icon: Clock3,
     eyebrow: 'pago pendiente',
     title: 'Estamos esperando la confirmación',
     description: 'Mercado Pago todavía está procesando el pago. No vuelvas a pagar; te avisaremos cuando se confirme.',
   },
   rechazado: {
-    icon: '×',
+    icon: X,
     eyebrow: 'pago no completado',
     title: 'No pudimos completar el pago',
     description: 'La operación fue rechazada o cancelada. Podés regresar a la tienda e intentar con otro medio de pago.',
   },
   desconocido: {
-    icon: '?',
+    icon: CircleHelp,
     eyebrow: 'verificación pendiente',
     title: 'No pudimos verificar el resultado',
     description: 'Tu pedido no se marcará como pagado hasta recibir la confirmación segura de Mercado Pago.',
@@ -85,6 +86,7 @@ export default async function PaymentResultPage({ params, searchParams }: Paymen
   if (!orderId && ['aprobado', 'pendiente', 'rechazado'].includes(routeResult)) result = 'desconocido';
 
   const content = resultContent[result];
+  const ResultIcon = content.icon;
   const message = `Hola, consulto por mi pago de Boutique del Este${reference ? `, referencia ${reference}` : ''}${orderId ? `, orden ${orderId}` : ''}.`;
   const whatsappUrl = `https://wa.me/59892143420?text=${encodeURIComponent(message)}`;
 
@@ -93,7 +95,7 @@ export default async function PaymentResultPage({ params, searchParams }: Paymen
       {result === 'aprobado' && <ClearPaidCart />}
       <Link className="payment-wordmark" href="/" aria-label="Volver a Boutique del Este">boutique<small>del este</small></Link>
       <section className="payment-result-card">
-        <span className="payment-result-icon" aria-hidden="true">{content.icon}</span>
+        <span className="payment-result-icon" aria-hidden="true"><ResultIcon /></span>
         <p>{content.eyebrow}</p>
         <h1>{content.title}</h1>
         <div>{content.description}</div>

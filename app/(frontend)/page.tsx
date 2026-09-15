@@ -1,8 +1,10 @@
 import Link from 'next/link';
+import { ArrowRight, House, ShieldCheck, Sparkles, Truck } from 'lucide-react';
+import { CategoryIcon } from '@/components/category-icon';
 import { HomeFilters } from '@/components/home-filters';
 import { ProductCard } from '@/components/product-card';
 import { StoreFooter } from '@/components/store-footer';
-import { Icon, StoreHeader } from '@/components/store-header';
+import { StoreHeader } from '@/components/store-header';
 import { SuggestionsPanel } from '@/components/suggestions-panel';
 import { getCategories, listProducts, PAGE_SIZE } from '@/lib/products';
 
@@ -40,41 +42,61 @@ export default async function Home({ searchParams }: Props) {
     <main>
       <StoreHeader />
 
-      <aside className="brand-disclaimer" aria-label="Información de la tienda">
-        <strong>Tienda independiente</strong>
-        <span>Comercializamos productos originales de marcas seleccionadas. No somos el sitio oficial de Natura.</span>
-      </aside>
-      <div className="shipping-notice">Maldonado y Punta del Este: entrega en hasta 48 h · Interior: despachamos en hasta 48 h por UES o Correo Uruguayo</div>
-
       <section id="inicio" className="hero catalog-hero" aria-label="Selección de belleza de Boutique del Este">
         <div className="hero-scrim" />
         <div className="hero-copy">
           <p>perfumería y cuidado personal · Uruguay</p>
-          <h1>Productos originales,<br /><em>cerca de vos.</em></h1>
+          <h1 aria-label="Productos originales, cerca de vos.">
+            <span className="hero-word">Productos</span>{' '}
+            <span className="hero-word">originales,</span><br />
+            <em><span className="hero-word">cerca</span>{' '}<span className="hero-word">de</span>{' '}<span className="hero-word">vos.</span></em>
+          </h1>
           <span>Perfumes, cuidado personal y regalos con precios en pesos uruguayos. Enviamos en un máximo de 48 horas en Maldonado y Punta del Este.</span>
-          <Link href="/#productos">ver catálogo</Link>
+          <Link href="/#productos">Ver Catálogo</Link>
         </div>
-        <div className="hero-stamp" aria-hidden="true"><span>DEL</span><strong>ESTE</strong></div>
+        <div className="hero-stamp" aria-hidden="true">
+          <svg className="hero-stamp-type" viewBox="0 0 128 128" focusable="false">
+            <defs>
+              <path id="hero-stamp-arc-top" d="M 8,64 A 56,56 0 0 0 120,64" />
+            </defs>
+            <g className="hero-stamp-ring hero-stamp-ring-one">
+              <text><textPath href="#hero-stamp-arc-top" startOffset="50%" textLength="48" lengthAdjust="spacingAndGlyphs">BOUTIQUE ·</textPath></text>
+            </g>
+            <g className="hero-stamp-ring hero-stamp-ring-two">
+              <text><textPath href="#hero-stamp-arc-top" startOffset="50%" textLength="48" lengthAdjust="spacingAndGlyphs">BOUTIQUE ·</textPath></text>
+            </g>
+            <g className="hero-stamp-ring hero-stamp-ring-three">
+              <text><textPath href="#hero-stamp-arc-top" startOffset="50%" textLength="48" lengthAdjust="spacingAndGlyphs">BOUTIQUE</textPath></text>
+            </g>
+            <g className="hero-stamp-ring hero-stamp-ring-four">
+              <text><textPath href="#hero-stamp-arc-top" startOffset="50%" textLength="48" lengthAdjust="spacingAndGlyphs">BOUTIQUE</textPath></text>
+            </g>
+            <g className="hero-stamp-ring hero-stamp-ring-five">
+              <text><textPath href="#hero-stamp-arc-top" startOffset="50%" textLength="48" lengthAdjust="spacingAndGlyphs">BOUTIQUE</textPath></text>
+            </g>
+          </svg>
+          <div className="hero-stamp-center"><span>DEL</span><strong>ESTE</strong></div>
+        </div>
       </section>
 
       <section className="benefits" aria-label="Beneficios de compra">
-        <article><Icon>◇</Icon><div><strong>Envíos en hasta 48 horas</strong><span>Maldonado y Punta del Este</span></div></article>
-        <article><Icon>◎</Icon><div><strong>Precios claros</strong><span>expresados en pesos uruguayos</span></div></article>
-        <article><Icon>✦</Icon><div><strong>Selección cuidada</strong><span>productos originales de marcas elegidas</span></div></article>
-        <article><Icon>⌂</Icon><div><strong>Atención cercana</strong><span>confirmamos disponibilidad al pedir</span></div></article>
+        <article><span className="icon"><Truck /></span><div><strong>Envíos en hasta 48 horas</strong><span>Maldonado y Punta del Este</span></div></article>
+        <article><span className="icon"><ShieldCheck /></span><div><strong>Precios claros</strong><span>expresados en pesos uruguayos</span></div></article>
+        <article><span className="icon"><Sparkles /></span><div><strong>Selección cuidada</strong><span>productos originales de marcas elegidas</span></div></article>
+        <article><span className="icon"><House /></span><div><strong>Atención cercana</strong><span>confirmamos disponibilidad al pedir</span></div></article>
       </section>
 
       <section className="category-section section-shell">
         <div className="section-heading">
           <div><p>comprá por categoría</p><h2>¿Qué estás buscando?</h2></div>
-          <Link href="/#productos">ver todo <span>→</span></Link>
+          <Link href="/#productos">ver todo <ArrowRight aria-hidden="true" /></Link>
         </div>
         <div className="category-grid">
           {categories.map((category) => (
             <Link className={`category-card ${category.tone}`} key={category.slug} href={`/categoria/${category.slug}`}>
-              <span className="category-art">{category.icon}</span>
+              <span className="category-art"><CategoryIcon name={category.icon} /></span>
               <strong>{category.name}</strong>
-              <small>abrir sección <b>→</b></small>
+              <small>abrir sección <ArrowRight aria-hidden="true" /></small>
             </Link>
           ))}
         </div>

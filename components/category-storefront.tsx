@@ -1,6 +1,8 @@
 'use client';
 
 import Link from 'next/link';
+import { ArrowLeft, ArrowRight } from 'lucide-react';
+import { CategoryIcon } from '@/components/category-icon';
 import { ProductCard } from '@/components/product-card';
 import { StoreFooter } from '@/components/store-footer';
 import { StoreHeader } from '@/components/store-header';
@@ -24,7 +26,7 @@ export function CategoryStorefront({ category, otherCategories, products, total,
 
     <section className={`category-hero ${category.tone}`}>
       <div className="section-shell">
-        <span className="category-hero-icon" aria-hidden="true">{category.icon}</span>
+        <span className="category-hero-icon" aria-hidden="true"><CategoryIcon name={category.icon} /></span>
         <p>explorá la colección</p>
         <h1>{category.name}</h1>
         <div>{category.description}</div>
@@ -42,17 +44,17 @@ export function CategoryStorefront({ category, otherCategories, products, total,
         {totalPages > 1 && (
           <nav className="catalog-pagination" aria-label="Páginas de la categoría">
             {page > 1
-              ? <Link href={`/categoria/${category.slug}?pagina=${page - 1}`}>← anterior</Link>
-              : <span className="disabled">← anterior</span>}
+              ? <Link href={`/categoria/${category.slug}?pagina=${page - 1}`}><ArrowLeft aria-hidden="true" /> anterior</Link>
+              : <span className="disabled"><ArrowLeft aria-hidden="true" /> anterior</span>}
             <span>Página {page} de {totalPages}</span>
             {page < totalPages
-              ? <Link href={`/categoria/${category.slug}?pagina=${page + 1}`}>siguiente →</Link>
-              : <span className="disabled">siguiente →</span>}
+              ? <Link href={`/categoria/${category.slug}?pagina=${page + 1}`}>siguiente <ArrowRight aria-hidden="true" /></Link>
+              : <span className="disabled">siguiente <ArrowRight aria-hidden="true" /></span>}
           </nav>
         )}
       </> : (
         <div className="empty-state category-empty">
-          <span>{category.icon}</span>
+          <span><CategoryIcon name={category.icon} /></span>
           <h3>Estamos preparando esta colección</h3>
           <p>Mientras tanto, podés descubrir nuestras otras categorías.</p>
           <Link href="/#productos">ver productos disponibles</Link>
@@ -64,7 +66,7 @@ export function CategoryStorefront({ category, otherCategories, products, total,
       <p>seguí explorando</p>
       <div>
         {otherCategories.map((item) => (
-          <Link key={item.slug} href={`/categoria/${item.slug}`}>{item.name}<span>→</span></Link>
+          <Link key={item.slug} href={`/categoria/${item.slug}`}>{item.name}<ArrowRight aria-hidden="true" /></Link>
         ))}
       </div>
     </section>

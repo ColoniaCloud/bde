@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { Check, UserRound } from 'lucide-react';
 import { useAuth } from '@/components/auth-provider';
 
 function accountLabel(email?: string) {
@@ -14,7 +15,7 @@ export function AccountButton() {
   if (loading) {
     return (
       <span className="account-button" aria-hidden="true">
-        <span className="icon">·</span><span>cuenta</span>
+        <span className="icon"><UserRound /></span><span>cuenta</span>
       </span>
     );
   }
@@ -25,7 +26,7 @@ export function AccountButton() {
       href="/cuenta"
       aria-label={customer ? `Cuenta de ${customer.email}` : 'Ingresar a mi cuenta'}
     >
-      <span aria-hidden="true" className="icon">{customer ? '✓' : '◍'}</span>
+      <span aria-hidden="true" className="icon">{customer ? <Check /> : <UserRound />}</span>
       <span>{customer ? accountLabel(customer.email) : 'ingresar'}</span>
     </Link>
   );
