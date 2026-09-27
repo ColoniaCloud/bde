@@ -64,7 +64,7 @@ export default async function PaymentResultPage({ params, searchParams }: Paymen
       const order = await getMercadoPagoOrder(orderId);
       result = verifiedResult(order.status, order.status_detail);
       reference = order.external_reference || reference;
-      amount = order.total_amount || '';
+      amount = order.total_amount ? String(order.total_amount) : '';
 
       // El cliente suele volver antes de que llegue el webhook. Aprovechamos la
       // consulta que ya hicimos para dejar el pedido con su estado real.
