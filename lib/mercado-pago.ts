@@ -31,12 +31,14 @@ export type ProductLookup = (codes: number[]) => Promise<Map<number, PricedProdu
 
 type MercadoPagoOrder = {
   id: string;
-  status: string;
-  status_detail: string;
+  status?: string;
+  status_detail?: string;
   checkout_url?: string;
+  init_point?: string;
+  sandbox_init_point?: string;
   external_reference?: string;
-  total_amount?: string;
-  items?: Array<{ title: string; quantity: number; unit_price: string; total_amount: string }>;
+  total_amount?: string | number;
+  items?: Array<{ title: string; quantity: number; unit_price: number | string }>;
 };
 
 export class MercadoPagoError extends Error {
@@ -203,50 +205,69 @@ export async function createMercadoPagoOrder(
   lookup: ProductLookup,
 ) {
   const productItems = await buildOrderItems(itemsInput, lookup);
-  const subtotal = productItems.reduce((total, item) => total + Number(item.total_amount), 0);
+  const subtotal = productItems.reduce(
+    (total, item) => total + Number(item.unit_price) * item.quantity,
+    0,
+  );
   const surcharge = mercadoPagoSurcharge(subtotal);
   const items = [
-    ...productItems,
-    {
-      title: `Recargo por pago con Mercado Pago (${MERCADO_PAGO_SURCHARGE_PERCENT}%)`,
-      unit_price: surcharge.toFixed(2),
-      quantity: 1,
-      unit_measure: 'unit',
-      total_amount: surcharge.toFixed(2),
-    },
+    ...productItems.map((item) => ({
+      title: item.title,
+      unit_price: Number(item.unit_price),
+      quantity: item.quantity,
+    })),
+    ...(surcharge > 0
+      ? [
+          {
+            title: `Recargo por pago con Mercado Pago (${MERCADO_PAGO_SURCHARGE_PERCENT}%)`,
+            unit_price: Number(surcharge.toFixed(2)),
+            quantity: 1,
+          },
+        ]
+      : []),
   ];
-  const totalAmount = (subtotal + surcharge).toFixed(2);
   const siteUrl = getSiteUrl();
   const externalReference = `BDE-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
 
-  const order = await mercadoPagoRequest('/v1/orders', {
+  const preference = await mercadoPagoRequest('/checkout/preferences', {
     method: 'POST',
-    headers: { 'X-Idempotency-Key': crypto.randomUUID() },
     body: JSON.stringify({
-      type: 'online',
-      processing_mode: 'automatic',
-      total_amount: totalAmount,
-      external_reference: externalReference,
-      description: 'Pedido Boutique del Este',
-      payer: { email: payerEmail },
       items,
-      config: {
-        notification_url: `${siteUrl}/api/mercado-pago/webhook`,
-        online: {
-          success_url: `${siteUrl}/pago/aprobado`,
-          failure_url: `${siteUrl}/pago/rechazado`,
-          pending_url: `${siteUrl}/pago/pendiente`,
-          auto_return: 'all',
-        },
+      payer: { email: payerEmail },
+      external_reference: externalReference,
+      back_urls: {
+        success: `${siteUrl}/pago/aprobado`,
+        failure: `${siteUrl}/pago/rechazado`,
+        pending: `${siteUrl}/pago/pendiente`,
       },
+      auto_return: 'approved',
+      notification_url: `${siteUrl}/api/mercado-pago/webhook`,
     }),
   });
 
-  if (!order.checkout_url) throw new MercadoPagoError('Mercado Pago no devolvió un enlace de pago.', 502);
-  return order;
+  const checkoutUrl = preference.init_point || preference.sandbox_init_point || preference.checkout_url;
+  if (!checkoutUrl) throw new MercadoPagoError('Mercado Pago no devolvió un enlace de pago.', 502);
+
+  return {
+    id: preference.id,
+    checkout_url: checkoutUrl,
+    external_reference: externalReference,
+  };
 }
 
 export async function getMercadoPagoOrder(orderId: string) {
-  if (!/^ORD[A-Za-z0-9_-]+$/.test(orderId)) throw new MercadoPagoError('Identificador de pago inválido.', 400);
-  return mercadoPagoRequest(`/v1/orders/${encodeURIComponent(orderId)}`);
+  if (!/^[A-Za-z0-9_-]+$/.test(orderId)) throw new MercadoPagoError('Identificador de pago inválido.', 400);
+
+  try {
+    return await mercadoPagoRequest(`/v1/payments/${encodeURIComponent(orderId)}`);
+  } catch (error) {
+    if (error instanceof MercadoPagoError && error.status === 404) {
+      try {
+        return await mercadoPagoRequest(`/merchant_orders/${encodeURIComponent(orderId)}`);
+      } catch {
+        return await mercadoPagoRequest(`/checkout/preferences/${encodeURIComponent(orderId)}`);
+      }
+    }
+    throw error;
+  }
 }
