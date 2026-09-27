@@ -59,6 +59,7 @@ type MercadoPagoFailure = {
   error?: string;
   errors?: Array<{ code?: string; message?: string; description?: string; details?: unknown }>;
   cause?: Array<{ code?: string | number; description?: string }>;
+  details?: unknown;
 };
 
 /**
@@ -79,13 +80,32 @@ export function describeFailure(body: string, status: number): string {
     return `HTTP ${status}: ${body.slice(0, 300) || 'respuesta vacía'}`;
   }
 
+  const formatDetails = (d: unknown): string | null => {
+    if (!d) return null;
+    if (typeof d === 'string') return d;
+    if (Array.isArray(d)) {
+      return d
+        .map((item) =>
+          typeof item === 'object' && item !== null
+            ? (item as { message?: string; field?: string; description?: string }).message ||
+              (item as { field?: string }).field ||
+              JSON.stringify(item)
+            : String(item),
+        )
+        .join('; ');
+    }
+    if (typeof d === 'object') return JSON.stringify(d);
+    return String(d);
+  };
+
   const reasons = [
     ...(parsed.errors ?? []).map((item) =>
-      [item.code, item.message || item.description].filter(Boolean).join(': '),
+      [item.code, item.message || item.description, formatDetails(item.details)].filter(Boolean).join(': '),
     ),
     ...(parsed.cause ?? []).map((item) =>
       [item.code, item.description].filter(Boolean).join(': '),
     ),
+    formatDetails(parsed.details),
     parsed.message,
     parsed.error,
   ].filter((reason): reason is string => Boolean(reason && reason.trim()));
@@ -204,8 +224,7 @@ export async function createMercadoPagoOrder(
     headers: { 'X-Idempotency-Key': crypto.randomUUID() },
     body: JSON.stringify({
       type: 'online',
-      processing_mode: 'manual',
-      capture_mode: 'automatic_async',
+      processing_mode: 'automatic',
       total_amount: totalAmount,
       external_reference: externalReference,
       description: 'Pedido Boutique del Este',
