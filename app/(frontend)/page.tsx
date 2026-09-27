@@ -6,6 +6,7 @@ import { ProductCard } from '@/components/product-card';
 import { StoreFooter } from '@/components/store-footer';
 import { StoreHeader } from '@/components/store-header';
 import { SuggestionsPanel } from '@/components/suggestions-panel';
+import { IntroAnimation } from '@/components/intro-animation';
 import { getCategories, listProducts, PAGE_SIZE } from '@/lib/products';
 
 type Props = {
@@ -40,6 +41,7 @@ export default async function Home({ searchParams }: Props) {
 
   return (
     <main>
+      <IntroAnimation />
       <StoreHeader />
 
       <section id="inicio" className="hero catalog-hero" aria-label="Selección de belleza de Boutique del Este">
