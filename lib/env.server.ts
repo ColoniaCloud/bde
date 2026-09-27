@@ -40,6 +40,7 @@ const schema = z.object({
   GROQ_MODEL: blankAsAbsent(z.string().min(1).optional()),
   // Sólo para apuntar a un proxy o a un simulador en pruebas.
   GROQ_BASE_URL: blankAsAbsent(z.url().optional()),
+  MERCADOPAGO_BASE_URL: blankAsAbsent(z.url().optional()),
 
   // Ingreso con Google. Es aditivo: sin credenciales, la tienda no ofrece el
   // botón y el ingreso con correo y contraseña sigue funcionando.

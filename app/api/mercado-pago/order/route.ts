@@ -63,17 +63,31 @@ export async function POST(request: Request) {
         orderNumber: purchaseOrder.number,
       });
     } catch (error) {
-      const detail = error instanceof Error ? error.message : 'error desconocido';
-      await appendEvent(purchaseOrder.id, 'mercado-pago-failed', detail);
+      // El motivo técnico queda en el historial del pedido, que es donde se
+      // mira desde el panel sin entrar al servidor.
+      await appendEvent(purchaseOrder.id, 'mercado-pago-failed', failureDetail(error));
       throw error;
     }
   } catch (error) {
     const known = error instanceof MercadoPagoError || error instanceof OrderError;
-    if (!known) logError('no se pudo iniciar el pago con Mercado Pago', error);
+    // Un rechazo de Mercado Pago también se registra. Antes sólo se registraba
+    // lo inesperado, así que el motivo del rechazo no quedaba en ningún lado y
+    // no había manera de averiguar por qué un pago no arrancaba.
+    if (!known || error instanceof MercadoPagoError) {
+      logError('no se pudo iniciar el pago con Mercado Pago', error, {
+        detail: error instanceof MercadoPagoError ? error.detail : undefined,
+      });
+    }
     const status = known ? error.status : 500;
     const message = known ? error.message : 'No pudimos iniciar el pago. Intentá nuevamente.';
     return NextResponse.json({ message }, { status });
   }
+}
+
+/** El motivo técnico si lo hay, y si no lo que se pueda rescatar del error. */
+function failureDetail(error: unknown) {
+  if (error instanceof MercadoPagoError && error.detail) return error.detail;
+  return error instanceof Error ? error.message : 'error desconocido';
 }
 
 /** Vincula el pedido a la cuenta si hay sesión. Comprar sin cuenta sigue siendo válido. */
