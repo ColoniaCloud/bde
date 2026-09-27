@@ -2,7 +2,19 @@ import { serverEnv } from '@/lib/env.server';
 import { getSiteUrl as resolveSiteUrl, SiteUrlError } from '@/lib/site-url';
 import { MERCADO_PAGO_SURCHARGE_PERCENT, mercadoPagoSurcharge } from '@/lib/pricing';
 
-const MERCADO_PAGO_API = 'https://api.mercadopago.com';
+const MERCADO_PAGO_DEFAULT_API = 'https://api.mercadopago.com';
+
+/**
+ * Permite apuntar a un servidor de reemplazo para probar.
+ *
+ * Mismo recurso que `GROQ_BASE_URL` y `GOOGLE_BASE_URL`: sin esto no hay manera
+ * de ejercitar el manejo de errores contra respuestas concretas, porque la API
+ * de Mercado Pago no se puede hacer fallar a pedido. En producción no se define
+ * y se usa la API real.
+ */
+function mercadoPagoApi() {
+  return serverEnv().MERCADOPAGO_BASE_URL?.replace(/\/$/, '') || MERCADO_PAGO_DEFAULT_API;
+}
 
 export type CheckoutItemInput = {
   id: number;
@@ -28,9 +40,58 @@ type MercadoPagoOrder = {
 };
 
 export class MercadoPagoError extends Error {
-  constructor(message: string, public status = 500) {
+  /**
+   * `message` es lo que ve quien compra; `detail` es el motivo técnico.
+   *
+   * Se separan porque no sirven para lo mismo: al cliente no le dice nada que
+   * el correo del comprador coincida con el de la cuenta vendedora, y a quien
+   * atiende la tienda es exactamente lo que necesita saber. El detalle queda en
+   * el registro del servidor y en el historial del pedido, no en el navegador.
+   */
+  constructor(message: string, public status = 500, public detail?: string) {
     super(message);
   }
+}
+
+/** Forma de los errores que devuelve Mercado Pago, que varía según el endpoint. */
+type MercadoPagoFailure = {
+  message?: string;
+  error?: string;
+  errors?: Array<{ code?: string; message?: string; description?: string; details?: unknown }>;
+  cause?: Array<{ code?: string | number; description?: string }>;
+};
+
+/**
+ * Saca de la respuesta de error el motivo más concreto que haya.
+ *
+ * Antes se leía sólo `payload.message` y se caía a un texto genérico. Mercado
+ * Pago casi nunca usa ese campo: los rechazos de la API de órdenes vienen en
+ * `errors[]` y los antiguos en `cause[]`, así que el motivo real —el único dato
+ * con el que se puede arreglar algo— se perdía siempre.
+ */
+export function describeFailure(body: string, status: number): string {
+  let parsed: MercadoPagoFailure | null = null;
+  try {
+    parsed = JSON.parse(body) as MercadoPagoFailure;
+  } catch {
+    // Mercado Pago también contesta HTML cuando algo va muy mal; el cuerpo en
+    // crudo sigue siendo más útil que nada.
+    return `HTTP ${status}: ${body.slice(0, 300) || 'respuesta vacía'}`;
+  }
+
+  const reasons = [
+    ...(parsed.errors ?? []).map((item) =>
+      [item.code, item.message || item.description].filter(Boolean).join(': '),
+    ),
+    ...(parsed.cause ?? []).map((item) =>
+      [item.code, item.description].filter(Boolean).join(': '),
+    ),
+    parsed.message,
+    parsed.error,
+  ].filter((reason): reason is string => Boolean(reason && reason.trim()));
+
+  if (reasons.length === 0) return `HTTP ${status}: ${body.slice(0, 300)}`;
+  return `HTTP ${status}: ${[...new Set(reasons)].join(' · ')}`.slice(0, 500);
 }
 
 export function getAccessToken() {
@@ -90,16 +151,28 @@ async function mercadoPagoRequest(path: string, init?: RequestInit) {
   headers.set('Authorization', `Bearer ${getAccessToken()}`);
   if (init?.body) headers.set('Content-Type', 'application/json');
 
-  const response = await fetch(`${MERCADO_PAGO_API}${path}`, {
+  const response = await fetch(`${mercadoPagoApi()}${path}`, {
     ...init,
     headers,
     cache: 'no-store',
   });
 
-  const payload = await response.json().catch(() => null) as (MercadoPagoOrder & { message?: string }) | null;
+  // Se lee como texto y después se parsea: si la respuesta no es JSON, con
+  // `response.json()` se perdía el cuerpo entero y no quedaba nada que mirar.
+  const body = await response.text().catch(() => '');
+  let payload: MercadoPagoOrder | null = null;
+  try {
+    payload = JSON.parse(body) as MercadoPagoOrder;
+  } catch {
+    payload = null;
+  }
+
   if (!response.ok || !payload) {
-    const message = payload?.message || 'Mercado Pago no pudo procesar la solicitud.';
-    throw new MercadoPagoError(message, response.status >= 400 && response.status < 500 ? 400 : 502);
+    throw new MercadoPagoError(
+      'No pudimos iniciar el pago. Podés enviar el pedido por WhatsApp.',
+      response.status >= 400 && response.status < 500 ? 400 : 502,
+      describeFailure(body, response.status),
+    );
   }
   return payload;
 }
