@@ -16,15 +16,28 @@ import { isAdmin, isPanel } from '@/lib/access';
 export const PriceUpdates: CollectionConfig = {
   hooks: {
     beforeChange: [
-      ({ data, operation }) => {
-        // El registro nace ya en «Leyendo el PDF»: el análisis arranca apenas
-        // confirma el alta y quien sube el archivo ve en qué está desde el
-        // primer momento, sin tener que recargar.
-        if (operation === 'create' && (!data.status || data.status === 'pending')) {
-          return { ...data, status: 'analyzing', summary: 'Leyendo el PDF…' };
-        }
+      ({ data, operation, context }) => {
+        // El análisis lo dispara *pedir* el estado «Recién subido», no llegar
+        // a él. Vale al crear (es el valor por omisión) y vale después, que es
+        // cómo se vuelve a leer un PDF: si la lectura falló, o si un reinicio
+        // del servidor la dejó a medias, se pone ese estado y se guarda.
+        const pedido = operation === 'create' ? data.status ?? 'pending' : data.status;
+        if (pedido !== 'pending') return data;
 
-        return data;
+        // La decisión se toma acá y se ejecuta en `afterChange`, que es lo que
+        // corre una vez que el guardado ya está firme.
+        context.startAnalysis = true;
+
+        return {
+          ...data,
+          status: 'analyzing',
+          summary: 'Leyendo el PDF…',
+          // La propuesta anterior no sobrevive a una relectura: dejarla
+          // sería ofrecer para aplicar filas de una lectura que ya se
+          // descartó.
+          error: null,
+          rows: [],
+        };
       },
     ],
     afterChange: [
@@ -35,7 +48,7 @@ export const PriceUpdates: CollectionConfig = {
 
         const { scheduleAnalysis, applyPriceUpdate } = await import('@/lib/price-updates');
 
-        if (operation === 'create' && doc.status === 'analyzing') {
+        if (context.startAnalysis) {
           // Sin `await`: leer una lista larga son varios minutos de llamadas
           // al modelo, y el pedido del panel no puede quedar esperando eso con
           // la transacción del alta tomada. El resultado queda en el registro.
@@ -81,10 +94,11 @@ export const PriceUpdates: CollectionConfig = {
       admin: {
         position: 'sidebar',
         description:
-          'Poné «Aplicar» y guardá para escribir los precios de las filas tildadas. No hay vuelta atrás automática.',
+          'Poné «Aplicar» y guardá para escribir los precios de las filas tildadas. No hay vuelta atrás automática. ' +
+          'Si la lectura falló o quedó a medias, poné «Volver a leer el PDF» y guardá: se lee de nuevo el mismo archivo.',
       },
       options: [
-        { label: '1 · Recién subido', value: 'pending' },
+        { label: '1 · Volver a leer el PDF', value: 'pending' },
         { label: '2 · Leyendo el PDF', value: 'analyzing' },
         { label: '3 · Listo para revisar', value: 'review' },
         { label: '4 · Aplicar los cambios tildados', value: 'apply' },

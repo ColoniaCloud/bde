@@ -169,8 +169,19 @@ recargar la pantalla para verlo.
 
 Como corre en el proceso de la aplicación, **un reinicio en medio de la lectura
 la interrumpe** y el registro queda en «Leyendo el PDF». No se pierde nada: el
-PDF ya está guardado y ningún precio se escribió. Conviene entonces publicar
+PDF ya está guardado y ningún precio se escribió. Conviene igual publicar
 cuando no haya una lista a medio leer.
+
+### Volver a leer un PDF
+
+Si la lectura falló —el modelo no estaba disponible, se cortó la red— o quedó a
+medias por un reinicio, **no hace falta volver a subir el archivo**: poné el
+estado en «1 · Volver a leer el PDF» y guardá. Se lee de nuevo el mismo archivo
+y se arma una propuesta nueva.
+
+La propuesta anterior se descarta al hacerlo, a propósito: dejarla sería ofrecer
+para aplicar filas de una lectura que ya se dio por mala. Los precios del
+catálogo no se tocan — releer nunca escribe nada.
 
 ### Recordatorio cada 20 días
 
