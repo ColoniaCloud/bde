@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { GroqError, chooseModel, parseExtraction, resetModelCache, resolveModel } from '@/lib/groq';
+import { GroqError, chooseModel, chunkBudget, parseExtraction, resetModelCache, resolveModel, splitIntoChunks } from '@/lib/groq';
 import { buildPriceDiff, type CatalogueEntry } from '@/lib/price-diff';
 
 describe('parseExtraction', () => {
@@ -77,7 +77,7 @@ describe('elección del modelo', () => {
       { id: 'algo-instruct-70b' },
     ]);
 
-    expect(chosen).toBe('algo-instruct-70b');
+    expect(chosen?.id).toBe('algo-instruct-70b');
   });
 
   it('ignora los modelos dados de baja', () => {
@@ -86,7 +86,7 @@ describe('elección del modelo', () => {
       { id: 'zzz-instruct', active: true },
     ]);
 
-    expect(chosen).toBe('zzz-instruct');
+    expect(chosen?.id).toBe('zzz-instruct');
   });
 
   it('entre iguales gana la ventana de contexto más grande: la lista es larga', () => {
@@ -95,7 +95,7 @@ describe('elección del modelo', () => {
       { id: 'b-instruct', context_window: 131_072 },
     ]);
 
-    expect(chosen).toBe('b-instruct');
+    expect(chosen?.id).toBe('b-instruct');
   });
 
   it('sin candidatos no adivina', () => {
@@ -111,7 +111,7 @@ describe('resolveModel', () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
 
-    await expect(resolveModel('https://api.groq.test/v1', 'k', 'el-mio')).resolves.toBe('el-mio');
+    await expect(resolveModel('https://api.groq.test/v1', 'k', 'el-mio')).resolves.toEqual({ id: 'el-mio' });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -122,7 +122,7 @@ describe('resolveModel', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    await expect(resolveModel('https://api.groq.test/v1', 'k')).resolves.toBe('algo-instruct');
+    await expect(resolveModel('https://api.groq.test/v1', 'k')).resolves.toMatchObject({ id: 'algo-instruct' });
     expect(fetchMock).toHaveBeenCalledOnce();
   });
 
@@ -206,5 +206,144 @@ describe('un modelo rechazado por Groq', () => {
     const extract = await extractorConEntorno();
 
     await expect(extract('una lista')).rejects.toThrow(/GROQ_API_KEY/);
+  });
+});
+
+describe('partir el documento en tandas', () => {
+  it('no corta un renglón al medio: una fila partida es un precio mal leído', () => {
+    const lines = Array.from({ length: 50 }, (_, i) => `${1000 + i} Producto ${i} $ ${100 + i}`);
+    const chunks = splitIntoChunks(lines.join('\n'), 200);
+
+    expect(chunks.length).toBeGreaterThan(1);
+    for (const line of lines) {
+      expect(chunks.some((chunk) => chunk.includes(line))).toBe(true);
+    }
+  });
+
+  it('ninguna tanda supera el presupuesto', () => {
+    const text = Array.from({ length: 400 }, (_, i) => `fila ${i} con algo de texto`).join('\n');
+
+    for (const chunk of splitIntoChunks(text, 500)) {
+      expect(chunk.length).toBeLessThanOrEqual(500);
+    }
+  });
+
+  it('un documento chico queda en una sola tanda', () => {
+    expect(splitIntoChunks('100 Perfume $ 900\n200 Crema $ 500', 10_000)).toHaveLength(1);
+  });
+
+  it('un renglón gigante sin saltos igual se parte', () => {
+    const chunks = splitIntoChunks('x'.repeat(2_500), 1_000);
+
+    expect(chunks).toHaveLength(3);
+    expect(chunks.join('')).toHaveLength(2_500);
+  });
+
+  it('no pierde ni duplica contenido', () => {
+    const text = Array.from({ length: 120 }, (_, i) => `linea-${i}`).join('\n');
+    const rejoined = splitIntoChunks(text, 100).join('\n');
+
+    expect(rejoined.split('\n').filter(Boolean)).toEqual(text.split('\n'));
+  });
+});
+
+describe('tamaño de tanda según el modelo', () => {
+  it('sin ventana conocida usa un valor prudente', () => {
+    expect(chunkBudget()).toBe(10_000);
+  });
+
+  it('una ventana enorme no habilita una tanda enorme: el límite es lo que el modelo escribe', () => {
+    expect(chunkBudget(1_000_000)).toBe(16_000);
+  });
+
+  it('una ventana chica no baja de un mínimo razonable', () => {
+    expect(chunkBudget(4_096)).toBe(6_000);
+  });
+});
+
+describe('lectura por tandas', () => {
+  beforeEach(() => resetModelCache());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  async function extractorCon(model: string) {
+    vi.resetModules();
+    vi.stubEnv('NODE_ENV', 'test');
+    vi.stubEnv('DATABASE_URI', 'postgres://user@localhost:5432/db');
+    vi.stubEnv('PAYLOAD_SECRET', 'x'.repeat(32));
+    vi.stubEnv('GROQ_API_KEY', 'gsk_test');
+    vi.stubEnv('GROQ_MODEL', model);
+    vi.stubEnv('GROQ_BASE_URL', 'https://api.groq.test/v1');
+    const { createGroqExtractor } = await import('@/lib/groq');
+    return createGroqExtractor();
+  }
+
+  const ok = (body: unknown) => ({
+    ok: true,
+    json: async () => ({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(body) } }] }),
+  });
+
+  it('una lista larga se lee en varios pedidos y se junta', async () => {
+    let call = 0;
+    const fetchMock = vi.fn(async () => ok({ items: [{ code: 100 + call++, price: 500 }] }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const extract = await extractorCon('un-modelo');
+    const largo = Array.from({ length: 2_000 }, (_, i) => `${i} Producto ${i} $ 500`).join('\n');
+    const { items } = await extract(largo);
+
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(1);
+    expect(items).toHaveLength(fetchMock.mock.calls.length);
+  });
+
+  it('de la segunda tanda en adelante viaja el encabezado: sin él se confunde la columna', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ok({ items: [] })));
+
+    const extract = await extractorCon('un-modelo');
+    const largo = ['CODIGO PRODUCTO VENTA COSTO', ...Array.from({ length: 2_000 }, (_, i) => `${i} P${i} 500 300`)]
+      .join('\n');
+    await extract(largo);
+
+    const bodies = (globalThis.fetch as unknown as { mock: { calls: [string, { body: string }][] } })
+      .mock.calls.map(([, init]) => init.body);
+
+    expect(bodies[0]).not.toContain('<encabezado>');
+    expect(bodies[1]).toContain('CODIGO PRODUCTO VENTA COSTO');
+  });
+
+  it('si una tanda falla, falla todo: media lista con «es la lista completa» marca sin stock lo que sí hay', async () => {
+    let call = 0;
+    vi.stubGlobal('fetch', vi.fn(async () =>
+      call++ === 0 ? ok({ items: [{ code: 1, price: 100 }] }) : { ok: false, status: 500, text: async () => 'boom' },
+    ));
+
+    const extract = await extractorCon('un-modelo');
+    const largo = Array.from({ length: 2_000 }, (_, i) => `${i} Producto ${i} $ 500`).join('\n');
+
+    await expect(extract(largo)).rejects.toThrow(/Tanda 2 de/);
+  });
+
+  it('una respuesta cortada por longitud se explica, no se reporta como JSON roto', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ choices: [{ finish_reason: 'length', message: { content: '{"items":[{"code":1,' } }] }),
+    })));
+
+    const extract = await extractorCon('un-modelo');
+
+    await expect(extract('100 Perfume $ 900')).rejects.toThrow(/se cortó por longitud/);
+  });
+
+  it('un PDF descomunal se rechaza con instrucciones, no con cien pedidos a Groq', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const extract = await extractorCon('un-modelo');
+    const enorme = Array.from({ length: 80_000 }, (_, i) => `${i} Producto ${i} $ 500`).join('\n');
+
+    await expect(extract(enorme)).rejects.toThrow(/partida en varios PDF/);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

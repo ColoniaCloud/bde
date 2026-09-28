@@ -151,6 +151,17 @@ Requiere `GROQ_API_KEY`. Sin ella, subir un PDF deja el registro en estado
 **El PDF tiene que tener texto seleccionable.** Un escaneo sin capa de texto se
 rechaza con un mensaje explícito en lugar de devolver una propuesta vacía.
 
+**Las listas largas se leen por tandas.** Una lista entera no entra en un solo
+pedido al modelo, así que el asistente la parte por renglones —nunca al medio de
+una fila— y junta el resultado. Si una tanda falla, falla todo el análisis a
+propósito: una lectura a medias con «Es la lista completa» tildado propondría
+marcar sin stock productos que sí están en el PDF.
+
+Hay un tope de 60 tandas. Un PDF que lo pase se rechaza pidiendo subir la lista
+partida en varios archivos, en lugar de lanzar cien pedidos y agotar la cuota.
+Ojo con el tiempo: las tandas van una tras otra, así que una lista larga puede
+tardar varios minutos.
+
 ### Recordatorio cada 20 días
 
 ```bash

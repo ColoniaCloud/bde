@@ -119,7 +119,7 @@ export async function listModels(base: string, apiKey: string): Promise<GroqMode
 }
 
 /** Descarta lo que no sirve y ordena por preferencia; `undefined` si no queda nada. */
-export function chooseModel(models: GroqModel[]): string | undefined {
+export function chooseModel(models: GroqModel[]): GroqModel | undefined {
   const usable = models.filter((model) => model.active !== false && !NOT_A_CHAT_MODEL.test(model.id));
 
   const rank = (id: string) => {
@@ -131,7 +131,7 @@ export function chooseModel(models: GroqModel[]): string | undefined {
     rank(a.id) - rank(b.id) ||
     (b.context_window ?? 0) - (a.context_window ?? 0) ||
     a.id.localeCompare(b.id),
-  )[0]?.id;
+  )[0];
 }
 
 /**
@@ -139,15 +139,17 @@ export function chooseModel(models: GroqModel[]): string | undefined {
  * por lista y no tiene sentido preguntar el catálogo en cada una. Se olvida si
  * Groq rechaza el modelo, para que una baja no obligue a reiniciar.
  */
-let cachedModel: string | undefined;
+let cachedModel: GroqModel | undefined;
 
 /** Sólo para los tests y para el descarte tras un rechazo. */
 export function resetModelCache() {
   cachedModel = undefined;
 }
 
-export async function resolveModel(base: string, apiKey: string, configured?: string): Promise<string> {
-  if (configured) return configured;
+export async function resolveModel(base: string, apiKey: string, configured?: string): Promise<GroqModel> {
+  // Un modelo fijado a mano se usa tal cual. No se conoce su ventana de
+  // contexto sin preguntar, así que el tamaño de tanda cae al valor prudente.
+  if (configured) return { id: configured };
   if (cachedModel) return cachedModel;
 
   const models = await listModels(base, apiKey);
@@ -183,6 +185,85 @@ async function rejectedModelMessage(model: string, base: string, apiKey: string,
     `Respuesta de Groq: ${detail.slice(0, 200)}`;
 }
 
+/**
+ * Una lista de precios entera no entra en un pedido.
+ *
+ * El catálogo llega como un PDF de decenas de megabytes y su texto plano puede
+ * ser de cientos de miles de caracteres: mandarlo de una sola vez es un 413 o
+ * un desborde de contexto, y antes de esto no había ni medición ni recorte.
+ * Se parte en tandas y se junta el resultado.
+ *
+ * El límite real no es el contexto de entrada sino cuánto puede *escribir* el
+ * modelo: la respuesta es una fila JSON por producto, y si se corta a la mitad
+ * el JSON no parsea. De ahí que las tandas sean chicas aunque la ventana sea
+ * enorme.
+ */
+const CHARS_PER_TOKEN = 3; // Prudente para español con muchos números.
+const INPUT_SHARE = 0.12; // El resto queda para el prompt y, sobre todo, la salida.
+const MIN_CHUNK_CHARS = 6_000;
+const MAX_CHUNK_CHARS = 16_000;
+const DEFAULT_CHUNK_CHARS = 10_000; // Cuando no se conoce la ventana del modelo.
+
+/**
+ * Tope de tandas por documento. Es una red de contención: 60 tandas ya son
+ * varios minutos y una lista más larga que eso conviene subirla partida, no
+ * lanzarle cien pedidos a Groq y agotar la cuota.
+ */
+const MAX_CHUNKS = 60;
+
+export function chunkBudget(contextWindow?: number): number {
+  if (!contextWindow) return DEFAULT_CHUNK_CHARS;
+
+  const chars = Math.floor(contextWindow * CHARS_PER_TOKEN * INPUT_SHARE);
+  return Math.min(MAX_CHUNK_CHARS, Math.max(MIN_CHUNK_CHARS, chars));
+}
+
+/**
+ * Corta por renglones: una fila de la lista partida al medio es un precio mal
+ * leído, que es exactamente lo que este sistema no puede permitirse.
+ */
+export function splitIntoChunks(text: string, maxChars: number): string[] {
+  const chunks: string[] = [];
+  let current = '';
+
+  for (const line of text.split('\n')) {
+    // Un renglón más largo que la tanda entera (una tabla sin saltos): no
+    // queda otra que partirlo, pero es el único caso.
+    if (line.length > maxChars) {
+      if (current) chunks.push(current);
+      current = '';
+      for (let at = 0; at < line.length; at += maxChars) chunks.push(line.slice(at, at + maxChars));
+      continue;
+    }
+
+    if (current && current.length + line.length + 1 > maxChars) {
+      chunks.push(current);
+      current = line;
+    } else {
+      current = current ? `${current}\n${line}` : line;
+    }
+  }
+
+  if (current.trim()) chunks.push(current);
+
+  return chunks.length ? chunks : [text];
+}
+
+/**
+ * Las primeras líneas del documento, que suelen traer los nombres de las
+ * columnas. A partir de la segunda tanda el modelo ya no las ve, y sin ellas
+ * puede confundir la columna de venta con la de costo.
+ */
+export function headerHint(text: string): string {
+  return text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 3)
+    .join('\n')
+    .slice(0, 300);
+}
+
 export function createGroqExtractor(): PriceExtractor {
   return async (documentText: string) => {
     const env = serverEnv();
@@ -191,53 +272,130 @@ export function createGroqExtractor(): PriceExtractor {
     }
 
     const base = env.GROQ_BASE_URL?.replace(/\/$/, '') || GROQ_DEFAULT_BASE;
-    const model = await resolveModel(base, env.GROQ_API_KEY, env.GROQ_MODEL);
+    const apiKey = env.GROQ_API_KEY;
+    const model = await resolveModel(base, apiKey, env.GROQ_MODEL);
 
-    const response = await fetch(`${base}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${env.GROQ_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model,
-        temperature: 0,
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          {
-            role: 'user',
-            content: `Extraé la lista de precios del siguiente documento.\n\n<documento>\n${documentText}\n</documento>`,
-          },
-        ],
-        response_format: {
-          type: 'json_schema',
-          json_schema: { name: 'lista_de_precios', schema: jsonSchema, strict: true },
-        },
-      }),
-      cache: 'no-store',
-    });
+    const chunks = splitIntoChunks(documentText, chunkBudget(model.context_window));
 
-    if (!response.ok) {
-      const detail = await response.text().catch(() => '');
-
-      if (response.status === 404 || detail.includes('model_not_found')) {
-        // El elegido ya no sirve: que la próxima lectura vuelva a preguntar.
-        resetModelCache();
-        throw new GroqError(await rejectedModelMessage(model, base, env.GROQ_API_KEY, detail), 503);
-      }
-
-      throw new GroqError(`Groq respondió ${response.status}. ${detail.slice(0, 200)}`);
+    if (chunks.length > MAX_CHUNKS) {
+      throw new GroqError(
+        `El PDF tiene demasiado texto para leerlo de una vez: ${documentText.length.toLocaleString('es-UY')} ` +
+          `caracteres, que son ${chunks.length} tandas y el tope es ${MAX_CHUNKS}. ` +
+          'Subí la lista partida en varios PDF (por marca o por rubro) y aplicá uno por vez.',
+        413,
+      );
     }
 
-    const payload = await response.json().catch(() => null) as
-      | { choices?: { message?: { content?: string } }[] }
-      | null;
-    const content = payload?.choices?.[0]?.message?.content;
+    const header = chunks.length > 1 ? headerHint(documentText) : '';
+    const items: ExtractionResult['items'] = [];
 
-    if (!content) throw new GroqError('Groq no devolvió contenido.');
+    // En serie a propósito: son pedidos grandes y en paralelo se choca con el
+    // límite de pedidos por minuto de Groq justo cuando la lista es más larga.
+    for (const [index, chunk] of chunks.entries()) {
+      const part = await readChunk({ base, apiKey, model, chunk, index, total: chunks.length, header });
+      items.push(...part.items);
+    }
 
-    return parseExtraction(content);
+    return { items };
   };
+}
+
+type ChunkRequest = {
+  base: string;
+  apiKey: string;
+  model: GroqModel;
+  chunk: string;
+  index: number;
+  total: number;
+  header: string;
+};
+
+async function readChunk(
+  { base, apiKey, model, chunk, index, total, header }: ChunkRequest,
+): Promise<ExtractionResult> {
+  const position = total > 1 ? `Tanda ${index + 1} de ${total}: ` : '';
+
+  // El encabezado va como referencia de columnas, no como contenido: sin él,
+  // de la segunda tanda en adelante el modelo no sabe cuál columna es la de
+  // venta al público.
+  const context = header && index > 0
+    ? `Esto es la parte ${index + 1} de ${total} de la lista. Las primeras líneas del documento, ` +
+      `sólo como referencia de las columnas (no extraigas filas de acá):\n<encabezado>\n${header}\n</encabezado>\n\n`
+    : '';
+
+  const response = await fetch(`${base}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: model.id,
+      temperature: 0,
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        {
+          role: 'user',
+          content: `${context}Extraé la lista de precios del siguiente documento.\n\n<documento>\n${chunk}\n</documento>`,
+        },
+      ],
+      response_format: {
+        type: 'json_schema',
+        json_schema: { name: 'lista_de_precios', schema: jsonSchema, strict: true },
+      },
+    }),
+    cache: 'no-store',
+  });
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+
+    if (response.status === 404 || detail.includes('model_not_found')) {
+      // El elegido ya no sirve: que la próxima lectura vuelva a preguntar.
+      resetModelCache();
+      throw new GroqError(await rejectedModelMessage(model.id, base, apiKey, detail), 503);
+    }
+
+    // Que el documento no entre sigue siendo posible con una tanda sola muy
+    // densa. El mensaje tiene que decir qué hacer, no repetir el código HTTP.
+    if (response.status === 413 || detail.includes('context_length') || detail.includes('too large')) {
+      throw new GroqError(
+        `${position}el modelo «${model.id}» no pudo con este tramo del PDF. ` +
+          'Subí la lista partida en varios PDF más chicos.',
+        413,
+      );
+    }
+
+    throw new GroqError(`${position}Groq respondió ${response.status}. ${detail.slice(0, 200)}`);
+  }
+
+  const payload = await response.json().catch(() => null) as
+    | { choices?: { message?: { content?: string }; finish_reason?: string }[] }
+    | null;
+  const choice = payload?.choices?.[0];
+
+  // Una respuesta cortada por longitud deja un JSON incompleto. Sin esto el
+  // error que se guarda es «no es JSON válido», que no dice qué hacer.
+  if (choice?.finish_reason === 'length') {
+    throw new GroqError(
+      `${position}la respuesta del modelo se cortó por longitud: el tramo tiene demasiados productos. ` +
+        'Subí la lista partida en varios PDF más chicos.',
+      413,
+    );
+  }
+
+  const content = choice?.message?.content;
+
+  if (!content) throw new GroqError(`${position}Groq no devolvió contenido.`);
+
+  try {
+    return parseExtraction(content);
+  } catch (error) {
+    // Sin la tanda, «la respuesta no es JSON válido» no dice dónde mirar.
+    throw error instanceof GroqError && position
+      ? new GroqError(`${position}${error.message}`, error.status)
+      : error;
+  }
 }
 
 /** Separado del transporte para poder probar el parseo sin red. */
