@@ -160,6 +160,12 @@ marcar sin stock productos que sí están en el PDF.
 Hay un tope de 60 tandas. Un PDF que lo pase se rechaza pidiendo subir la lista
 partida en varios archivos, en lugar de lanzar cien pedidos y agotar la cuota.
 
+**Nada queda esperando para siempre.** Cada tanda tiene dos minutos y la
+lectura completa, veinte; si Groq no responde, el registro termina en «Falló»
+con el motivo en castellano en lugar de quedarse colgado. Y como partir la
+lista hace muchos pedidos seguidos, un «límite de pedidos alcanzado» (429) se
+espera y se reintenta una vez antes de darse por vencido.
+
 **La lectura no ocurre mientras se sube el archivo.** Subir el PDF devuelve
 enseguida, con el registro en «2 · Leyendo el PDF», y el análisis sigue en
 segundo plano dentro del mismo proceso de Node: son varios minutos de llamadas

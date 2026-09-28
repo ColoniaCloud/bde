@@ -347,3 +347,108 @@ describe('lectura por tandas', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+describe('límites de tiempo y límite de pedidos', () => {
+  beforeEach(() => resetModelCache());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  async function extractor() {
+    vi.resetModules();
+    vi.stubEnv('NODE_ENV', 'test');
+    vi.stubEnv('DATABASE_URI', 'postgres://user@localhost:5432/db');
+    vi.stubEnv('PAYLOAD_SECRET', 'x'.repeat(32));
+    vi.stubEnv('GROQ_API_KEY', 'gsk_test');
+    vi.stubEnv('GROQ_MODEL', 'un-modelo');
+    vi.stubEnv('GROQ_BASE_URL', 'https://api.groq.test/v1');
+    const { createGroqExtractor } = await import('@/lib/groq');
+    return createGroqExtractor();
+  }
+
+  const ok = (body: unknown) => ({
+    ok: true,
+    status: 200,
+    json: async () => ({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(body) } }] }),
+  });
+
+  const tooManyRequests = (retryAfter?: string) => ({
+    ok: false,
+    status: 429,
+    headers: { get: (name: string) => (name === 'retry-after' ? retryAfter ?? null : null) },
+    text: async () => '{"error":{"message":"Rate limit reached"}}',
+  });
+
+  /** Un fetch colgado dejaba el registro en «Leyendo el PDF» para siempre. */
+  it('una conexión colgada se corta y se explica en castellano', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      throw new DOMException('The operation was aborted', 'TimeoutError');
+    }));
+
+    const extract = await extractor();
+
+    await expect(extract('100 Perfume $ 900')).rejects.toMatchObject({
+      status: 504,
+      message: expect.stringMatching(/tiempo de espera/),
+    });
+  });
+
+  it('una caída de red no se reporta como error del modelo', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      throw new TypeError('fetch failed');
+    }));
+
+    const extract = await extractor();
+
+    await expect(extract('100 Perfume $ 900')).rejects.toMatchObject({
+      status: 502,
+      message: expect.stringMatching(/No se pudo contactar a Groq/),
+    });
+  });
+
+  it('un 429 se espera lo que Groq pide y se reintenta una vez', async () => {
+    let call = 0;
+    const fetchMock = vi.fn(async () => (call++ === 0 ? tooManyRequests('0') : ok({ items: [{ code: 1, price: 10 }] })));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const extract = await extractor();
+    const { items } = await extract('100 Perfume $ 900');
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(items).toHaveLength(1);
+  });
+
+  it('no reintenta en ciclo: si sigue limitado, corta y dice cómo retomar', async () => {
+    const fetchMock = vi.fn(async () => tooManyRequests('0'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const extract = await extractor();
+
+    await expect(extract('100 Perfume $ 900')).rejects.toThrow(/Volver a leer el PDF/);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('una espera larguísima no se hace: se informa y se corta', async () => {
+    const fetchMock = vi.fn(async () => tooManyRequests('600'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const extract = await extractor();
+
+    await expect(extract('100 Perfume $ 900')).rejects.toThrow(/más de un minuto/);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('la consulta del catálogo de modelos también tiene corte', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      throw new DOMException('The operation was aborted', 'TimeoutError');
+    }));
+    vi.resetModules();
+    const { listModels } = await import('@/lib/groq');
+
+    await expect(listModels('https://api.groq.test/v1', 'k')).rejects.toMatchObject({
+      status: 504,
+      message: expect.stringMatching(/catálogo de modelos/),
+    });
+  });
+});

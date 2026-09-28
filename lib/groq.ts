@@ -36,6 +36,28 @@ const NOT_A_CHAT_MODEL = /whisper|tts|embed|guard|moderation|transcri|speech|vis
  */
 const PREFERRED = [/instruct/i, /versatile/i, /^openai\//i, /^qwen/i, /^moonshotai\//i, /^llama/i];
 
+/**
+ * Límites de tiempo.
+ *
+ * `fetch` sin `signal` espera para siempre: una conexión que queda colgada
+ * dejaba el registro en «Leyendo el PDF» indefinidamente, ocupando el proceso,
+ * sin nada en el panel que explicara por qué.
+ */
+const CHUNK_TIMEOUT_MS = 120_000; // Una tanda que tarda más que esto no va a llegar.
+const MODELS_TIMEOUT_MS = 15_000; // Consultar el catálogo es una respuesta chica.
+/** Techo de la lectura completa: 60 tandas lentas no pueden ser horas. */
+const TOTAL_TIMEOUT_MS = 20 * 60_000;
+/** Un «volvé en más de esto» no se espera: se informa y se corta. */
+const MAX_RETRY_AFTER_MS = 60_000;
+/** Cuánto esperar ante un 429 que no dice cuánto. */
+const DEFAULT_RETRY_AFTER_MS = 10_000;
+
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function isTimeout(error: unknown): boolean {
+  return error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
+}
+
 export class GroqError extends Error {
   constructor(message: string, public status = 502) {
     super(message);
@@ -98,12 +120,50 @@ Reglas:
   confidence baja en lugar de inventar un número.
 - No agregues productos que no estén en el documento.`;
 
+/**
+ * `fetch` con corte por tiempo y con el fallo traducido: sin esto, lo que
+ * queda escrito en el registro es «This operation was aborted», que no le
+ * dice nada a quien está tratando de subir una lista de precios.
+ */
+async function groqFetch(
+  url: string,
+  init: RequestInit,
+  signal: AbortSignal,
+  what: string,
+): Promise<Response> {
+  try {
+    return await fetch(url, { ...init, signal });
+  } catch (error) {
+    if (isTimeout(error)) {
+      throw new GroqError(`${what} se pasó del tiempo de espera y se cortó.`, 504);
+    }
+
+    throw new GroqError(
+      `No se pudo contactar a Groq: ${error instanceof Error ? error.message : 'error de red'}.`,
+      502,
+    );
+  }
+}
+
+/** Cuánto pide esperar Groq ante un 429. `null` si es demasiado. */
+function retryAfterMs(response: Response): number | null {
+  const header = response.headers?.get?.('retry-after');
+  const seconds = header ? Number(header) : Number.NaN;
+  // Puede venir como fecha en lugar de segundos; ahí se usa la espera por
+  // omisión, que igual está topeada.
+  const ms = Number.isFinite(seconds) ? seconds * 1_000 : DEFAULT_RETRY_AFTER_MS;
+
+  return ms > MAX_RETRY_AFTER_MS ? null : Math.max(0, ms);
+}
+
 /** Qué modelos tiene habilitados la cuenta. */
 export async function listModels(base: string, apiKey: string): Promise<GroqModel[]> {
-  const response = await fetch(`${base}/models`, {
-    headers: { Authorization: `Bearer ${apiKey}` },
-    cache: 'no-store',
-  });
+  const response = await groqFetch(
+    `${base}/models`,
+    { headers: { Authorization: `Bearer ${apiKey}` }, cache: 'no-store' },
+    AbortSignal.timeout(MODELS_TIMEOUT_MS),
+    'La consulta del catálogo de modelos de Groq',
+  );
 
   if (!response.ok) {
     const detail = await response.text().catch(() => '');
@@ -288,11 +348,23 @@ export function createGroqExtractor(): PriceExtractor {
 
     const header = chunks.length > 1 ? headerHint(documentText) : '';
     const items: ExtractionResult['items'] = [];
+    // Plazo para la lectura entera, además del de cada tanda: sesenta tandas
+    // lentas no pueden convertirse en horas.
+    const deadline = AbortSignal.timeout(TOTAL_TIMEOUT_MS);
 
     // En serie a propósito: son pedidos grandes y en paralelo se choca con el
     // límite de pedidos por minuto de Groq justo cuando la lista es más larga.
     for (const [index, chunk] of chunks.entries()) {
-      const part = await readChunk({ base, apiKey, model, chunk, index, total: chunks.length, header });
+      const part = await readChunk({
+        base,
+        apiKey,
+        model,
+        chunk,
+        index,
+        total: chunks.length,
+        header,
+        deadline,
+      });
       items.push(...part.items);
     }
 
@@ -308,10 +380,11 @@ type ChunkRequest = {
   index: number;
   total: number;
   header: string;
+  deadline: AbortSignal;
 };
 
 async function readChunk(
-  { base, apiKey, model, chunk, index, total, header }: ChunkRequest,
+  { base, apiKey, model, chunk, index, total, header, deadline }: ChunkRequest,
 ): Promise<ExtractionResult> {
   const position = total > 1 ? `Tanda ${index + 1} de ${total}: ` : '';
 
@@ -323,7 +396,7 @@ async function readChunk(
       `sólo como referencia de las columnas (no extraigas filas de acá):\n<encabezado>\n${header}\n</encabezado>\n\n`
     : '';
 
-  const response = await fetch(`${base}/chat/completions`, {
+  const init: RequestInit = {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -345,10 +418,62 @@ async function readChunk(
       },
     }),
     cache: 'no-store',
-  });
+  };
+
+  const request = async () => {
+    try {
+      return await groqFetch(
+        `${base}/chat/completions`,
+        init,
+        // Se corta lo que llegue primero: el plazo de esta tanda o el de la
+        // lectura entera.
+        AbortSignal.any([deadline, AbortSignal.timeout(CHUNK_TIMEOUT_MS)]),
+        `${position}la lectura de esta parte del PDF`,
+      );
+    } catch (error) {
+      if (deadline.aborted) {
+        throw new GroqError(
+          `La lectura del PDF pasó los ${TOTAL_TIMEOUT_MS / 60_000} minutos y se cortó. ` +
+            'Subí la lista partida en varios PDF más chicos.',
+          504,
+        );
+      }
+
+      throw error;
+    }
+  };
+
+  let response = await request();
+
+  // Partir la lista en tandas hace muchos pedidos seguidos, así que topar con
+  // el límite por minuto es esperable. Se espera lo que Groq pida y se
+  // reintenta una vez; perder una lectura de cuarenta tandas por un 429 sería
+  // absurdo, pero reintentar en un ciclo sería peor.
+  if (response.status === 429) {
+    const wait = retryAfterMs(response);
+
+    if (wait === null) {
+      throw new GroqError(
+        `${position}Groq está limitando los pedidos y pide esperar más de un minuto. ` +
+          'Probá de nuevo más tarde con «Volver a leer el PDF».',
+        429,
+      );
+    }
+
+    await delay(wait);
+    response = await request();
+  }
 
   if (!response.ok) {
     const detail = await response.text().catch(() => '');
+
+    if (response.status === 429) {
+      throw new GroqError(
+        `${position}Groq sigue limitando los pedidos después de esperar. ` +
+          'Probá de nuevo más tarde con «Volver a leer el PDF».',
+        429,
+      );
+    }
 
     if (response.status === 404 || detail.includes('model_not_found')) {
       // El elegido ya no sirve: que la próxima lectura vuelva a preguntar.
