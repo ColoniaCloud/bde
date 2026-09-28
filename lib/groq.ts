@@ -13,14 +13,28 @@ import { serverEnv } from '@/lib/env.server';
 const GROQ_DEFAULT_BASE = 'https://api.groq.com/openai/v1';
 
 /**
- * El identificador se lee del entorno porque Groq depreca modelos seguido
- * (llama-4-scout quedó obsoleto en junio de 2026). Conviene confirmarlo contra
- * GET /openai/v1/models antes de desplegar.
+ * A propósito no hay un identificador de modelo escrito a mano.
  *
- * Verificado el 2026-09-10: qwen3.6-27b y qwen3.8-27b están disponibles y los
- * dos soportan json_schema, así que son intercambiables por configuración.
+ * Lo hubo, y fue la causa de que el asistente dejara de funcionar: el id quedó
+ * fijo en el código y en la documentación, Groq lo dio de baja (o nunca
+ * existió) y lo único que veía el operador era un 404 crudo en el panel.
+ * Un valor por defecto acá es una fecha de vencimiento silenciosa.
+ *
+ * Ahora: si `GROQ_MODEL` está puesto, se usa tal cual y se respeta. Si no, se
+ * pregunta qué modelos tiene la cuenta y se elige uno. Y cuando Groq rechaza
+ * el modelo, el mensaje que queda guardado dice cuáles sí están disponibles.
  */
-const DEFAULT_MODEL = 'qwen/qwen3.6-27b';
+
+/** Lo que devuelve /models y no sirve para leer una lista de precios. */
+const NOT_A_CHAT_MODEL = /whisper|tts|embed|guard|moderation|transcri|speech|vision-only/i;
+
+/**
+ * Orden de preferencia *entre los que la cuenta devuelva*. No afirma que
+ * ninguno exista: es nada más el criterio de desempate. Si no coincide
+ * ninguno, gana el de mayor ventana de contexto, que para una lista de precios
+ * larga es lo que importa.
+ */
+const PREFERRED = [/instruct/i, /versatile/i, /^openai\//i, /^qwen/i, /^moonshotai\//i, /^llama/i];
 
 export class GroqError extends Error {
   constructor(message: string, public status = 502) {
@@ -43,6 +57,8 @@ export type ExtractionResult = z.infer<typeof responseSchema>;
 
 /** El contrato de la llamada, inyectable para poder probar el resto sin red. */
 export type PriceExtractor = (documentText: string) => Promise<ExtractionResult>;
+
+export type GroqModel = { id: string; active?: boolean; context_window?: number };
 
 const jsonSchema = {
   type: 'object',
@@ -82,6 +98,91 @@ Reglas:
   confidence baja en lugar de inventar un número.
 - No agregues productos que no estén en el documento.`;
 
+/** Qué modelos tiene habilitados la cuenta. */
+export async function listModels(base: string, apiKey: string): Promise<GroqModel[]> {
+  const response = await fetch(`${base}/models`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+    cache: 'no-store',
+  });
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    throw new GroqError(
+      `No se pudo consultar la lista de modelos de Groq (${response.status}). ${detail.slice(0, 200)}`,
+      response.status === 401 ? 503 : 502,
+    );
+  }
+
+  const payload = await response.json().catch(() => null) as { data?: GroqModel[] } | null;
+
+  return (payload?.data ?? []).filter((model) => typeof model?.id === 'string');
+}
+
+/** Descarta lo que no sirve y ordena por preferencia; `undefined` si no queda nada. */
+export function chooseModel(models: GroqModel[]): string | undefined {
+  const usable = models.filter((model) => model.active !== false && !NOT_A_CHAT_MODEL.test(model.id));
+
+  const rank = (id: string) => {
+    const index = PREFERRED.findIndex((pattern) => pattern.test(id));
+    return index === -1 ? PREFERRED.length : index;
+  };
+
+  return usable.sort((a, b) =>
+    rank(a.id) - rank(b.id) ||
+    (b.context_window ?? 0) - (a.context_window ?? 0) ||
+    a.id.localeCompare(b.id),
+  )[0]?.id;
+}
+
+/**
+ * El modelo elegido se recuerda mientras viva el proceso: son varias lecturas
+ * por lista y no tiene sentido preguntar el catálogo en cada una. Se olvida si
+ * Groq rechaza el modelo, para que una baja no obligue a reiniciar.
+ */
+let cachedModel: string | undefined;
+
+/** Sólo para los tests y para el descarte tras un rechazo. */
+export function resetModelCache() {
+  cachedModel = undefined;
+}
+
+export async function resolveModel(base: string, apiKey: string, configured?: string): Promise<string> {
+  if (configured) return configured;
+  if (cachedModel) return cachedModel;
+
+  const models = await listModels(base, apiKey);
+  const chosen = chooseModel(models);
+
+  if (!chosen) {
+    throw new GroqError(
+      'La cuenta de Groq no tiene ningún modelo de texto disponible. ' +
+        `Devolvió: ${models.map((model) => model.id).join(', ') || '(nada)'}.`,
+      503,
+    );
+  }
+
+  cachedModel = chosen;
+  return chosen;
+}
+
+/**
+ * Un modelo rechazado es un problema de configuración, no de la lista de
+ * precios: el mensaje tiene que decir con qué reemplazarlo sin salir del panel.
+ */
+async function rejectedModelMessage(model: string, base: string, apiKey: string, detail: string) {
+  const available = await listModels(base, apiKey)
+    .then((models) => models.filter((m) => !NOT_A_CHAT_MODEL.test(m.id)).map((m) => m.id))
+    .catch(() => [] as string[]);
+
+  const suggestion = available.length
+    ? `Disponibles en esta cuenta: ${available.join(', ')}. Poné GROQ_MODEL con uno de esos, ` +
+      'o dejala vacía para que se elija solo.'
+    : 'Tampoco se pudo leer la lista de modelos de la cuenta; revisá GROQ_API_KEY.';
+
+  return `Groq rechazó el modelo «${model}»: no existe o la cuenta no tiene acceso. ${suggestion} ` +
+    `Respuesta de Groq: ${detail.slice(0, 200)}`;
+}
+
 export function createGroqExtractor(): PriceExtractor {
   return async (documentText: string) => {
     const env = serverEnv();
@@ -90,6 +191,8 @@ export function createGroqExtractor(): PriceExtractor {
     }
 
     const base = env.GROQ_BASE_URL?.replace(/\/$/, '') || GROQ_DEFAULT_BASE;
+    const model = await resolveModel(base, env.GROQ_API_KEY, env.GROQ_MODEL);
+
     const response = await fetch(`${base}/chat/completions`, {
       method: 'POST',
       headers: {
@@ -97,7 +200,7 @@ export function createGroqExtractor(): PriceExtractor {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: env.GROQ_MODEL || DEFAULT_MODEL,
+        model,
         temperature: 0,
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
@@ -116,6 +219,13 @@ export function createGroqExtractor(): PriceExtractor {
 
     if (!response.ok) {
       const detail = await response.text().catch(() => '');
+
+      if (response.status === 404 || detail.includes('model_not_found')) {
+        // El elegido ya no sirve: que la próxima lectura vuelva a preguntar.
+        resetModelCache();
+        throw new GroqError(await rejectedModelMessage(model, base, env.GROQ_API_KEY, detail), 503);
+      }
+
       throw new GroqError(`Groq respondió ${response.status}. ${detail.slice(0, 200)}`);
     }
 

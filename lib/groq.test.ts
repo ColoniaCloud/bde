@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { GroqError, parseExtraction } from '@/lib/groq';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { GroqError, chooseModel, parseExtraction, resetModelCache, resolveModel } from '@/lib/groq';
 import { buildPriceDiff, type CatalogueEntry } from '@/lib/price-diff';
 
 describe('parseExtraction', () => {
@@ -65,5 +65,146 @@ describe('el PDF es contenido no confiable', () => {
 
     expect(rows[0].action).toBe('discarded');
     expect(rows[0].newPrice).toBeNull();
+  });
+});
+
+describe('elección del modelo', () => {
+  it('descarta lo que no sirve para leer texto', () => {
+    const chosen = chooseModel([
+      { id: 'whisper-large-v3' },
+      { id: 'text-embedding-3' },
+      { id: 'algo-guard-8b' },
+      { id: 'algo-instruct-70b' },
+    ]);
+
+    expect(chosen).toBe('algo-instruct-70b');
+  });
+
+  it('ignora los modelos dados de baja', () => {
+    const chosen = chooseModel([
+      { id: 'aaa-instruct', active: false },
+      { id: 'zzz-instruct', active: true },
+    ]);
+
+    expect(chosen).toBe('zzz-instruct');
+  });
+
+  it('entre iguales gana la ventana de contexto más grande: la lista es larga', () => {
+    const chosen = chooseModel([
+      { id: 'a-instruct', context_window: 8_192 },
+      { id: 'b-instruct', context_window: 131_072 },
+    ]);
+
+    expect(chosen).toBe('b-instruct');
+  });
+
+  it('sin candidatos no adivina', () => {
+    expect(chooseModel([{ id: 'whisper-large-v3' }])).toBeUndefined();
+  });
+});
+
+describe('resolveModel', () => {
+  beforeEach(() => resetModelCache());
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('respeta GROQ_MODEL sin consultar la lista', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(resolveModel('https://api.groq.test/v1', 'k', 'el-mio')).resolves.toBe('el-mio');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('sin GROQ_MODEL pregunta qué hay y elige', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ id: 'whisper-large-v3' }, { id: 'algo-instruct' }] }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(resolveModel('https://api.groq.test/v1', 'k')).resolves.toBe('algo-instruct');
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('no vuelve a preguntar mientras viva el proceso', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ id: 'algo-instruct' }] }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await resolveModel('https://api.groq.test/v1', 'k');
+    await resolveModel('https://api.groq.test/v1', 'k');
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('avisa cuando la cuenta no tiene ningún modelo de texto', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ id: 'whisper-large-v3' }] }),
+    }));
+
+    await expect(resolveModel('https://api.groq.test/v1', 'k')).rejects.toThrow(GroqError);
+  });
+
+  it('una clave inválida se reporta como configuración, no como falla de Groq', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      text: async () => '{"error":{"message":"Invalid API Key"}}',
+    }));
+
+    await expect(resolveModel('https://api.groq.test/v1', 'k')).rejects.toMatchObject({ status: 503 });
+  });
+});
+
+describe('un modelo rechazado por Groq', () => {
+  beforeEach(() => resetModelCache());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  /** El 404 que dejó el asistente fuera de servicio en producción. */
+  const modelNotFound = {
+    ok: false,
+    status: 404,
+    text: async () =>
+      '{"error":{"message":"The model `viejo-inexistente` does not exist","code":"model_not_found"}}',
+  };
+
+  async function extractorConEntorno() {
+    vi.resetModules();
+    vi.stubEnv('NODE_ENV', 'test');
+    vi.stubEnv('DATABASE_URI', 'postgres://user@localhost:5432/db');
+    vi.stubEnv('PAYLOAD_SECRET', 'x'.repeat(32));
+    vi.stubEnv('GROQ_API_KEY', 'gsk_test');
+    vi.stubEnv('GROQ_MODEL', 'viejo-inexistente');
+    vi.stubEnv('GROQ_BASE_URL', 'https://api.groq.test/v1');
+    const { createGroqExtractor } = await import('@/lib/groq');
+    return createGroqExtractor();
+  }
+
+  it('el error dice qué modelos sí existen en la cuenta', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) =>
+      url.endsWith('/models')
+        ? { ok: true, json: async () => ({ data: [{ id: 'algo-instruct' }, { id: 'otro-instruct' }] }) }
+        : modelNotFound,
+    ));
+
+    const extract = await extractorConEntorno();
+
+    await expect(extract('una lista')).rejects.toThrow(/algo-instruct, otro-instruct/);
+  });
+
+  it('si tampoco se puede leer la lista, apunta a la clave', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) =>
+      url.endsWith('/models') ? { ok: false, status: 401, text: async () => '' } : modelNotFound,
+    ));
+
+    const extract = await extractorConEntorno();
+
+    await expect(extract('una lista')).rejects.toThrow(/GROQ_API_KEY/);
   });
 });
