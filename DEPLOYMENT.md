@@ -159,8 +159,18 @@ marcar sin stock productos que sí están en el PDF.
 
 Hay un tope de 60 tandas. Un PDF que lo pase se rechaza pidiendo subir la lista
 partida en varios archivos, en lugar de lanzar cien pedidos y agotar la cuota.
-Ojo con el tiempo: las tandas van una tras otra, así que una lista larga puede
-tardar varios minutos.
+
+**La lectura no ocurre mientras se sube el archivo.** Subir el PDF devuelve
+enseguida, con el registro en «2 · Leyendo el PDF», y el análisis sigue en
+segundo plano dentro del mismo proceso de Node: son varios minutos de llamadas
+al modelo y no pueden tener tomada la transacción de PostgreSQL del alta. El
+resultado —propuesta o error— aparece en el registro al terminar; hay que
+recargar la pantalla para verlo.
+
+Como corre en el proceso de la aplicación, **un reinicio en medio de la lectura
+la interrumpe** y el registro queda en «Leyendo el PDF». No se pierde nada: el
+PDF ya está guardado y ningún precio se escribió. Conviene entonces publicar
+cuando no haya una lista a medio leer.
 
 ### Recordatorio cada 20 días
 

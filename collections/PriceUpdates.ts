@@ -15,18 +15,35 @@ import { isAdmin, isPanel } from '@/lib/access';
  */
 export const PriceUpdates: CollectionConfig = {
   hooks: {
+    beforeChange: [
+      ({ data, operation }) => {
+        // El registro nace ya en «Leyendo el PDF»: el análisis arranca apenas
+        // confirma el alta y quien sube el archivo ve en qué está desde el
+        // primer momento, sin tener que recargar.
+        if (operation === 'create' && (!data.status || data.status === 'pending')) {
+          return { ...data, status: 'analyzing', summary: 'Leyendo el PDF…' };
+        }
+
+        return data;
+      },
+    ],
     afterChange: [
       async ({ doc, operation, req, context }) => {
         // `skipAnalysis` corta la recursión: el análisis actualiza el mismo
         // documento y volvería a dispararse a sí mismo.
         if (context.skipAnalysis) return doc;
 
-        const { analyzePriceUpdate, applyPriceUpdate } = await import('@/lib/price-updates');
+        const { scheduleAnalysis, applyPriceUpdate } = await import('@/lib/price-updates');
 
-        if (operation === 'create' && doc.status === 'pending') {
-          await analyzePriceUpdate(doc.id as number, req);
+        if (operation === 'create' && doc.status === 'analyzing') {
+          // Sin `await`: leer una lista larga son varios minutos de llamadas
+          // al modelo, y el pedido del panel no puede quedar esperando eso con
+          // la transacción del alta tomada. El resultado queda en el registro.
+          void scheduleAnalysis(req.payload, doc.id as number);
         }
 
+        // Aplicar sí va acá y sí se espera: escribe precios, y o se escriben
+        // todos los aprobados dentro de esta transacción o no se escribe nada.
         if (operation === 'update' && doc.status === 'apply') {
           await applyPriceUpdate(doc.id as number, req);
         }
