@@ -2,8 +2,9 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Heart, Menu, MessageCircle, Search, ShoppingBag, X } from 'lucide-react';
+import { Heart, Menu, MessageCircle, ShoppingBag, X } from 'lucide-react';
 import { AccountButton } from '@/components/account-button';
+import { SearchBox } from '@/components/search-box';
 import { useStore } from '@/components/store-provider';
 
 const navItems = [
@@ -20,24 +21,15 @@ const navItems = [
 ];
 
 export function StoreHeader() {
-  const [query, setQuery] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
   const { cartCount, openCart, showNotice } = useStore();
-
-  function submitSearch() {
-    const search = query.trim();
-    window.location.href = search ? `/?q=${encodeURIComponent(search)}#productos` : '/#productos';
-  }
 
   return <>
     <div className="top-strip"><span>Envíos en un máximo de 48 h en Maldonado y Punta del Este</span><span>Precios en pesos uruguayos</span><span>Stock sujeto a confirmación</span></div>
     <header className="site-header">
       <button className="mobile-menu" aria-label={menuOpen ? 'Cerrar menú' : 'Abrir menú'} aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}>{menuOpen ? <X /> : <Menu />}</button>
       <Link className="wordmark" href="/" aria-label="Boutique del Este, inicio"><img src="/LOG%20OK.png" alt="Boutique del Este" /></Link>
-      <form className="search" onSubmit={(event) => { event.preventDefault(); submitSearch(); }} role="search">
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="¿qué estás buscando hoy?" aria-label="Buscar productos" />
-        <button aria-label="Buscar"><Search className="icon" /></button>
-      </form>
+      <SearchBox />
       <div className="account-actions">
         <AccountButton />
         <button aria-label="Mis favoritos" onClick={() => showNotice('Tus favoritos quedan guardados en este dispositivo.')}><Heart className="icon" /><span>favoritos</span></button>
