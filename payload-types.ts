@@ -186,6 +186,14 @@ export interface Product {
       }[]
     | null;
   /**
+   * Lo suma automáticamente cada pedido marcado como pagado.
+   */
+  soldCount?: number | null;
+  /**
+   * Se incrementa cada vez que alguien abre la ficha del producto.
+   */
+  viewCount?: number | null;
+  /**
    * Lo escribe el asistente de precios de la fase 4. No se edita a mano.
    */
   priceHistory?:
@@ -556,6 +564,8 @@ export interface ProductsSelect<T extends boolean = true> {
         text?: T;
         id?: T;
       };
+  soldCount?: T;
+  viewCount?: T;
   priceHistory?:
     | T
     | {

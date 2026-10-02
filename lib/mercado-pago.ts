@@ -97,7 +97,9 @@ export function describeFailure(body: string, status: number): string {
         .join('; ');
     }
     if (typeof d === 'object') return JSON.stringify(d);
-    return String(d);
+    // Lo que llega acá viene de parsear JSON: sólo puede ser número o booleano.
+    if (typeof d === 'number' || typeof d === 'boolean') return String(d);
+    return null;
   };
 
   const reasons = [

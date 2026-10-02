@@ -131,6 +131,37 @@ export const Products: CollectionConfig = {
       fields: [{ name: 'text', type: 'text', label: 'Detalle', required: true }],
     },
     {
+      type: 'row',
+      fields: [
+        {
+          name: 'soldCount',
+          type: 'number',
+          label: 'Unidades vendidas',
+          defaultValue: 0,
+          min: 0,
+          index: true,
+          admin: {
+            width: '50%',
+            readOnly: true,
+            description: 'Lo suma automáticamente cada pedido marcado como pagado.',
+          },
+        },
+        {
+          name: 'viewCount',
+          type: 'number',
+          label: 'Vistas de la ficha',
+          defaultValue: 0,
+          min: 0,
+          index: true,
+          admin: {
+            width: '50%',
+            readOnly: true,
+            description: 'Se incrementa cada vez que alguien abre la ficha del producto.',
+          },
+        },
+      ],
+    },
+    {
       name: 'priceHistory',
       type: 'array',
       label: 'Historial de precios',

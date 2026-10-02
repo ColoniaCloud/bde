@@ -5,6 +5,7 @@ import * as migration_20260909_123000_rate_limits from './20260909_123000_rate_l
 import * as migration_20260909_234723_price_updates from './20260909_234723_price_updates';
 import * as migration_20260909_235337_complete_list from './20260909_235337_complete_list';
 import * as migration_20260910_012957_customers from './20260910_012957_customers';
+import * as migration_20261002_003347_add_product_counters from './20261002_003347_add_product_counters';
 
 export const migrations = [
   {
@@ -40,6 +41,11 @@ export const migrations = [
   {
     up: migration_20260910_012957_customers.up,
     down: migration_20260910_012957_customers.down,
-    name: '20260910_012957_customers'
+    name: '20260910_012957_customers',
+  },
+  {
+    up: migration_20261002_003347_add_product_counters.up,
+    down: migration_20261002_003347_add_product_counters.down,
+    name: '20261002_003347_add_product_counters'
   },
 ];

@@ -1,7 +1,12 @@
 import 'server-only';
 import configPromise from '@payload-config';
+import { sql } from '@payloadcms/db-postgres';
 import { getPayload, type Where } from 'payload';
+import { type ProductSort } from '@/lib/product-sort';
 import type { Category as PayloadCategory, Product as PayloadProduct } from '@/payload-types';
+
+export type { ProductSort } from '@/lib/product-sort';
+export { PRODUCT_SORTS } from '@/lib/product-sort';
 
 /**
  * Lectura del catálogo desde la base, para Server Components.
@@ -116,11 +121,20 @@ export async function getProductByCode(code: number): Promise<StoreProduct | nul
   return doc ? toStoreProduct(doc) : null;
 }
 
+const SORT_FIELDS: Record<ProductSort, string> = {
+  relevance: 'code',
+  'price-asc': 'price',
+  'price-desc': '-price',
+  'best-selling': '-soldCount',
+  'most-viewed': '-viewCount',
+};
+
 type ListOptions = {
   categorySlug?: string;
   query?: string;
   page?: number;
   limit?: number;
+  sort?: ProductSort;
 };
 
 export type ProductPage = {
@@ -139,6 +153,7 @@ export async function listProducts({
   query,
   page = 1,
   limit = PAGE_SIZE,
+  sort = 'relevance',
 }: ListOptions = {}): Promise<ProductPage> {
   const payload = await payloadClient();
   const conditions: Where[] = [];
@@ -149,22 +164,27 @@ export async function listProducts({
 
   const text = query?.trim();
   if (text) {
-    // El filtro anterior, que corría en el navegador, concatenaba marca, nombre
-    // y categoría; se mantiene el mismo alcance para no perder resultados que
-    // los clientes ya encontraban (buscar «Perfumería», por ejemplo).
-    conditions.push({
-      or: [
-        { name: { like: text } },
-        { brand: { like: text } },
-        { 'category.name': { like: text } },
-      ],
-    });
+    // Se busca por palabra en vez de por la frase completa: así "perfume
+    // floral" encuentra "Floral Perfume X" aunque el orden no coincida.
+    // Cada palabra debe aparecer en al menos uno de los campos (nombre,
+    // marca, categoría o etiqueta); las palabras se combinan con "y".
+    const words = text.split(/\s+/).filter(Boolean);
+    for (const word of words) {
+      conditions.push({
+        or: [
+          { name: { like: word } },
+          { brand: { like: word } },
+          { 'category.name': { like: word } },
+          { tag: { like: word } },
+        ],
+      });
+    }
   }
 
   const result = await payload.find({
     collection: 'products',
     where: conditions.length > 0 ? { and: conditions } : undefined,
-    sort: 'code',
+    sort: SORT_FIELDS[sort] ?? 'code',
     page,
     limit,
     depth: 1,
@@ -176,6 +196,17 @@ export async function listProducts({
     page: result.page ?? 1,
     totalPages: result.totalPages,
   };
+}
+
+/**
+ * Suma una vista a la ficha del producto. Se llama desde `after()`, una vez que
+ * la página ya se envió, para no demorar la respuesta por esta escritura.
+ */
+export async function incrementViewCount(code: number): Promise<void> {
+  const payload = await payloadClient();
+  await payload.db.drizzle.execute(
+    sql`UPDATE products SET view_count = COALESCE(view_count, 0) + 1 WHERE code = ${code}`,
+  );
 }
 
 /** Otras opciones de la misma categoría, para el pie de la ficha de producto. */
