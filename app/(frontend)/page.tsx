@@ -5,31 +5,35 @@ import { HomeFilters } from '@/components/home-filters';
 import { ProductCard } from '@/components/product-card';
 import { StoreFooter } from '@/components/store-footer';
 import { StoreHeader } from '@/components/store-header';
+import { SortSelect } from '@/components/sort-select';
 import { SuggestionsPanel } from '@/components/suggestions-panel';
 import { IntroAnimation } from '@/components/intro-animation';
+import { isProductSort } from '@/lib/product-sort';
 import { getCategories, listProducts, PAGE_SIZE } from '@/lib/products';
 
 type Props = {
-  searchParams: Promise<{ q?: string; categoria?: string; pagina?: string }>;
+  searchParams: Promise<{ q?: string; categoria?: string; pagina?: string; orden?: string }>;
 };
 
-/** Conserva el filtro y la búsqueda al cambiar de página. */
-function productsHref(params: { q?: string; categoria?: string; pagina?: number }) {
+/** Conserva el filtro, la búsqueda y el orden al cambiar de página. */
+function productsHref(params: { q?: string; categoria?: string; pagina?: number; orden?: string }) {
   const search = new URLSearchParams();
   if (params.q) search.set('q', params.q);
   if (params.categoria) search.set('categoria', params.categoria);
   if (params.pagina && params.pagina > 1) search.set('pagina', String(params.pagina));
+  if (params.orden) search.set('orden', params.orden);
   const query = search.toString();
   return `/${query ? `?${query}` : ''}#productos`;
 }
 
 export default async function Home({ searchParams }: Props) {
-  const { q, categoria, pagina } = await searchParams;
+  const { q, categoria, pagina, orden } = await searchParams;
   const page = Math.max(1, Number(pagina) || 1);
+  const sort = isProductSort(orden) ? orden : 'relevance';
 
   const [categories, { products, total, totalPages }] = await Promise.all([
     getCategories(),
-    listProducts({ query: q, categorySlug: categoria, page }),
+    listProducts({ query: q, categorySlug: categoria, page, sort }),
   ]);
 
   const selected = categoria ? categories.find((item) => item.slug === categoria) : undefined;
@@ -107,7 +111,10 @@ export default async function Home({ searchParams }: Props) {
       <section id="productos" className="products-section section-shell">
         <div className="section-heading products-heading">
           <div><p>{total} productos</p><h2>{heading}</h2></div>
-          <HomeFilters categories={categories} selected={categoria} query={q} />
+          <div className="products-controls">
+            <HomeFilters categories={categories} selected={categoria} query={q} sort={sort} />
+            <SortSelect value={sort} />
+          </div>
         </div>
 
         {products.length ? (
@@ -126,11 +133,11 @@ export default async function Home({ searchParams }: Props) {
         {total > PAGE_SIZE && (
           <nav className="catalog-pagination" aria-label="Páginas del catálogo">
             {page > 1
-              ? <Link href={productsHref({ q, categoria, pagina: page - 1 })}>← anterior</Link>
+              ? <Link href={productsHref({ q, categoria, pagina: page - 1, orden })}>← anterior</Link>
               : <span className="disabled">← anterior</span>}
             <span>Página {page} de {totalPages}</span>
             {page < totalPages
-              ? <Link href={productsHref({ q, categoria, pagina: page + 1 })}>siguiente →</Link>
+              ? <Link href={productsHref({ q, categoria, pagina: page + 1, orden })}>siguiente →</Link>
               : <span className="disabled">siguiente →</span>}
           </nav>
         )}

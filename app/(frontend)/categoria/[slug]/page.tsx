@@ -1,12 +1,13 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { CategoryStorefront } from '@/components/category-storefront';
+import { isProductSort } from '@/lib/product-sort';
 import { getCategories, getCategoryBySlug, listProducts } from '@/lib/products';
 import { SITE_NAME } from '@/lib/site';
 
 type Props = {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ pagina?: string }>;
+  searchParams: Promise<{ pagina?: string; orden?: string }>;
 };
 
 /**
@@ -44,13 +45,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function CategoryPage({ params, searchParams }: Props) {
   const { slug } = await params;
-  const { pagina } = await searchParams;
+  const { pagina, orden } = await searchParams;
   const category = await getCategoryBySlug(slug);
   if (!category) notFound();
 
   const page = Math.max(1, Number(pagina) || 1);
+  const sort = isProductSort(orden) ? orden : 'relevance';
   const [{ products, total, totalPages }, categories] = await Promise.all([
-    listProducts({ categorySlug: slug, page }),
+    listProducts({ categorySlug: slug, page, sort }),
     getCategories(),
   ]);
 
@@ -62,6 +64,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
       total={total}
       page={page}
       totalPages={totalPages}
+      sort={sort}
     />
   );
 }

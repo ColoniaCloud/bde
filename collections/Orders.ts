@@ -1,3 +1,4 @@
+import { sql } from '@payloadcms/db-postgres';
 import type { CollectionConfig } from 'payload';
 
 /**
@@ -33,6 +34,25 @@ export const Orders: CollectionConfig = {
   },
   defaultSort: '-createdAt',
   timestamps: true,
+  hooks: {
+    afterChange: [
+      // Suma las unidades al contador de "más vendidos" la primera vez que un
+      // pedido queda pagado. Compara contra el estado anterior para no sumar
+      // de nuevo si el pedido se vuelve a guardar ya pagado (webhook repetido,
+      // edición desde el panel, etc.).
+      async ({ doc, previousDoc, operation, req }) => {
+        if (operation !== 'update') return;
+        if (doc.status !== 'paid' || previousDoc?.status === 'paid') return;
+
+        for (const line of doc.lines ?? []) {
+          await req.payload.db.drizzle.execute(sql`
+            UPDATE products SET sold_count = COALESCE(sold_count, 0) + ${line.quantity}
+            WHERE code = ${line.code}
+          `);
+        }
+      },
+    ],
+  },
   fields: [
     {
       type: 'row',

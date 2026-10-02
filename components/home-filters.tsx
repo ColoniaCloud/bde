@@ -7,17 +7,19 @@ type Props = {
   categories: StoreCategory[];
   selected?: string;
   query?: string;
+  sort?: string;
 };
 
 /**
  * Los filtros son enlaces, no botones con estado: cada combinación tiene su
  * propia URL, así que se puede compartir, marcar y volver con el botón atrás.
  */
-export function HomeFilters({ categories, selected, query }: Props) {
+export function HomeFilters({ categories, selected, query, sort }: Props) {
   function href(categorySlug?: string) {
     const search = new URLSearchParams();
     if (query) search.set('q', query);
     if (categorySlug) search.set('categoria', categorySlug);
+    if (sort && sort !== 'relevance') search.set('orden', sort);
     const suffix = search.toString();
     return `/${suffix ? `?${suffix}` : ''}#productos`;
   }
