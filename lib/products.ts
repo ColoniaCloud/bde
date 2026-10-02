@@ -144,6 +144,40 @@ export type ProductPage = {
   totalPages: number;
 };
 
+const ACCENTED = 'áàâãäéèêëíìîïóòôõöúùûüñçÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÑÇ';
+const PLAIN = 'aaaaaeeeeiiiiooooouuuuncAAAAAEEEEIIIIOOOOOUUUUNC';
+
+/** Minúsculas y sin tildes, para que "jabon" encuentre "Jabón". */
+export function normalizeSearch(text: string): string {
+  return text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+}
+
+function escapeLike(word: string): string {
+  return word.replace(/[\\%_]/g, (char) => `\\${char}`);
+}
+
+/**
+ * Ids de los productos que contienen todas las palabras buscadas, en cualquier
+ * orden, en el nombre, la marca, la etiqueta o la categoría. Payload no ofrece
+ * comparar sin tildes, así que el filtro se arma en SQL y después Payload
+ * pagina y ordena sobre esos ids.
+ */
+async function matchingProductIds(query: string): Promise<number[]> {
+  const words = normalizeSearch(query).split(/\s+/).filter(Boolean).slice(0, 8);
+  if (words.length === 0) return [];
+
+  const haystack = sql`lower(translate(concat_ws(' ', p.name, p.brand, p.tag, c.name), ${ACCENTED}, ${PLAIN}))`;
+  const clauses = words.map((word) => sql`${haystack} LIKE ${`%${escapeLike(word)}%`}`);
+
+  const payload = await payloadClient();
+  const result = await payload.db.drizzle.execute(sql`
+    SELECT p.id FROM products p
+    LEFT JOIN categories c ON c.id = p.category_id
+    WHERE ${sql.join(clauses, sql` AND `)}
+  `);
+  return result.rows.map((row) => Number(row.id));
+}
+
 /**
  * La búsqueda y el filtrado ocurren en Postgres, no en el navegador: es lo que
  * permite que el catálogo entero deje de viajar al cliente.
@@ -164,21 +198,9 @@ export async function listProducts({
 
   const text = query?.trim();
   if (text) {
-    // Se busca por palabra en vez de por la frase completa: así "perfume
-    // floral" encuentra "Floral Perfume X" aunque el orden no coincida.
-    // Cada palabra debe aparecer en al menos uno de los campos (nombre,
-    // marca, categoría o etiqueta); las palabras se combinan con "y".
-    const words = text.split(/\s+/).filter(Boolean);
-    for (const word of words) {
-      conditions.push({
-        or: [
-          { name: { like: word } },
-          { brand: { like: word } },
-          { 'category.name': { like: word } },
-          { tag: { like: word } },
-        ],
-      });
-    }
+    const ids = await matchingProductIds(text);
+    if (ids.length === 0) return { products: [], total: 0, page: 1, totalPages: 0 };
+    conditions.push({ id: { in: ids } });
   }
 
   const result = await payload.find({
