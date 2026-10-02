@@ -42,6 +42,11 @@ export function SearchBox() {
       return;
     }
 
+    // La lista abierta es de la búsqueda anterior: no tiene que poder usarse
+    // mientras llega la nueva, ni quedar a la vista si el pedido falla.
+    setOpen(false);
+    setActive(-1);
+
     timer.current = setTimeout(async () => {
       const controller = new AbortController();
       request.current = controller;
@@ -49,6 +54,7 @@ export function SearchBox() {
         const response = await fetch(`/api/search?q=${encodeURIComponent(term)}`, { signal: controller.signal });
         if (!response.ok) return;
         const data = (await response.json()) as { products: Suggestion[]; total: number };
+        if (controller.signal.aborted) return;
         setSuggestions(data.products);
         setTotal(data.total);
         setSearched(term);
@@ -95,7 +101,7 @@ export function SearchBox() {
         <input
           value={query}
           onChange={(event) => { setQuery(event.target.value); fetchSuggestions(event.target.value); }}
-          onFocus={() => { if (suggestions.length > 0 || searched) setOpen(true); }}
+          onFocus={() => { if (searched && searched === query.trim()) setOpen(true); }}
           onKeyDown={handleKeyDown}
           placeholder="¿qué estás buscando hoy?"
           aria-label="Buscar productos"
