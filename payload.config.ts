@@ -12,6 +12,7 @@ import { Orders } from '@/collections/Orders';
 import { PriceUpdates } from '@/collections/PriceUpdates';
 import { Products } from '@/collections/Products';
 import { Users } from '@/collections/Users';
+import { migrations } from './migrations';
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -38,6 +39,10 @@ export default buildConfig({
     // base local termina distinta de la que producen las migraciones. Todo
     // cambio de esquema pasa por `npm run payload migrate:create`.
     push: false,
+    // El deploy de Hostinger sólo hace `npm run build`: nadie corre `payload
+    // migrate` antes de arrancar. Así las migraciones pendientes se aplican
+    // solas al iniciar en producción, antes de atender pedidos.
+    prodMigrations: migrations,
   }),
   editor: lexicalEditor(),
   secret: required('PAYLOAD_SECRET'),
