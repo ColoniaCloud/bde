@@ -29,16 +29,24 @@ export type CheckoutItemInput = {
 export type PricedProduct = { brand: string; name: string; price: number };
 export type ProductLookup = (codes: number[]) => Promise<Map<number, PricedProduct>>;
 
-type MercadoPagoOrder = {
+type MercadoPagoPreference = {
   id: string;
-  status?: string;
-  status_detail?: string;
   checkout_url?: string;
   init_point?: string;
   sandbox_init_point?: string;
+};
+
+export type MercadoPagoPayment = {
+  id: number | string;
+  status?: string;
+  status_detail?: string;
   external_reference?: string;
-  total_amount?: string | number;
-  items?: Array<{ title: string; quantity: number; unit_price: number | string }>;
+  transaction_amount?: number;
+};
+
+type MercadoPagoMerchantOrder = {
+  id: number | string;
+  external_reference?: string;
 };
 
 export class MercadoPagoError extends Error {
@@ -169,7 +177,7 @@ export async function buildOrderItems(input: CheckoutItemInput[], lookup: Produc
   });
 }
 
-async function mercadoPagoRequest(path: string, init?: RequestInit) {
+async function mercadoPagoRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
   headers.set('accept', 'application/json');
   headers.set('Authorization', `Bearer ${getAccessToken()}`);
@@ -184,9 +192,9 @@ async function mercadoPagoRequest(path: string, init?: RequestInit) {
   // Se lee como texto y después se parsea: si la respuesta no es JSON, con
   // `response.json()` se perdía el cuerpo entero y no quedaba nada que mirar.
   const body = await response.text().catch(() => '');
-  let payload: MercadoPagoOrder | null = null;
+  let payload: T | null = null;
   try {
-    payload = JSON.parse(body) as MercadoPagoOrder;
+    payload = JSON.parse(body) as T;
   } catch {
     payload = null;
   }
@@ -231,7 +239,7 @@ export async function createMercadoPagoOrder(
   const siteUrl = getSiteUrl();
   const externalReference = `BDE-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
 
-  const preference = await mercadoPagoRequest('/checkout/preferences', {
+  const preference = await mercadoPagoRequest<MercadoPagoPreference>('/checkout/preferences', {
     method: 'POST',
     body: JSON.stringify({
       items,
@@ -257,19 +265,27 @@ export async function createMercadoPagoOrder(
   };
 }
 
-export async function getMercadoPagoOrder(orderId: string) {
-  if (!/^[A-Za-z0-9_-]+$/.test(orderId)) throw new MercadoPagoError('Identificador de pago inválido.', 400);
+function assertId(id: string) {
+  if (!/^[A-Za-z0-9_-]+$/.test(id)) throw new MercadoPagoError('Identificador de pago inválido.', 400);
+}
 
-  try {
-    return await mercadoPagoRequest(`/v1/payments/${encodeURIComponent(orderId)}`);
-  } catch (error) {
-    if (error instanceof MercadoPagoError && error.status === 404) {
-      try {
-        return await mercadoPagoRequest(`/merchant_orders/${encodeURIComponent(orderId)}`);
-      } catch {
-        return await mercadoPagoRequest(`/checkout/preferences/${encodeURIComponent(orderId)}`);
-      }
-    }
-    throw error;
-  }
+export async function getMercadoPagoPayment(paymentId: string) {
+  assertId(paymentId);
+  return mercadoPagoRequest<MercadoPagoPayment>(`/v1/payments/${encodeURIComponent(paymentId)}`);
+}
+
+export async function getMercadoPagoMerchantOrder(merchantOrderId: string) {
+  assertId(merchantOrderId);
+  return mercadoPagoRequest<MercadoPagoMerchantOrder>(`/merchant_orders/${encodeURIComponent(merchantOrderId)}`);
+}
+
+/** Todos los pagos asociados a una referencia: el comprador puede haber reintentado. */
+export async function findPaymentsByReference(externalReference: string) {
+  const query = new URLSearchParams({
+    external_reference: externalReference,
+    sort: 'date_created',
+    criteria: 'desc',
+  });
+  const result = await mercadoPagoRequest<{ results?: MercadoPagoPayment[] }>(`/v1/payments/search?${query}`);
+  return result.results ?? [];
 }

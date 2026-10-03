@@ -1,7 +1,8 @@
 import { Check, CircleHelp, Clock3, X } from 'lucide-react';
 import { ClearPaidCart } from '@/components/clear-paid-cart';
-import { getMercadoPagoOrder } from '@/lib/mercado-pago';
-import { findOrderByMercadoPagoId, recordPaymentResult } from '@/lib/orders';
+import { logError } from '@/lib/logger';
+import { getMercadoPagoPayment } from '@/lib/mercado-pago';
+import { findOrderByReference, syncOrderPayment } from '@/lib/orders';
 import Link from 'next/link';
 
 type PaymentPageProps = {
@@ -42,52 +43,47 @@ function first(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
 }
 
-function verifiedResult(status?: string, detail?: string): ResultType {
-  if (status === 'processed' && detail === 'accredited') return 'aprobado';
-  if (status === 'failed' || status === 'canceled') return 'rechazado';
-  if (status === 'created' || status === 'processing' || status === 'action_required') return 'pendiente';
-  return 'desconocido';
+const resultByStatus = { paid: 'aprobado', cancelled: 'rechazado', pending: 'pendiente' } as const;
+
+/** Checkout Pro manda `payment_id` y `collection_id`, y el texto "null" si no hubo pago. */
+function paymentIdFrom(query: Record<string, string | string[] | undefined>) {
+  const id = first(query.payment_id) || first(query.collection_id);
+  return id && /^\d+$/.test(id) ? id : undefined;
 }
 
-export default async function PaymentResultPage({ params, searchParams }: PaymentPageProps) {
-  const routeResult = (await params).resultado;
+export default async function PaymentResultPage({ searchParams }: PaymentPageProps) {
+  // La ruta (/pago/aprobado, etc.) no se usa: cualquiera puede escribirla. El
+  // estado sale siempre de consultar a Mercado Pago con el token de la tienda.
   const query = await searchParams;
-  const orderId = first(query.order_id);
+  const paymentId = paymentIdFrom(query);
   let result: ResultType = 'desconocido';
   let reference = first(query.external_reference) || '';
   let amount = '';
-
   let orderNumber = '';
 
-  if (orderId) {
-    try {
-      const order = await getMercadoPagoOrder(orderId);
-      result = verifiedResult(order.status, order.status_detail);
-      reference = order.external_reference || reference;
-      amount = order.total_amount ? String(order.total_amount) : '';
-
-      // El cliente suele volver antes de que llegue el webhook. Aprovechamos la
-      // consulta que ya hicimos para dejar el pedido con su estado real.
-      if (result === 'aprobado' || result === 'rechazado') {
-        await recordPaymentResult(
-          orderId,
-          result === 'aprobado' ? 'paid' : 'cancelled',
-          `retorno del cliente · ${order.status}`,
-        );
-      }
-
-      orderNumber = (await findOrderByMercadoPagoId(orderId))?.number ?? '';
-    } catch {
-      result = 'desconocido';
+  try {
+    let payment;
+    if (paymentId) {
+      payment = await getMercadoPagoPayment(paymentId);
+      reference = payment.external_reference || reference;
+      amount = payment.transaction_amount ? String(payment.transaction_amount) : '';
     }
-  }
 
-  // La ruta solo se usa como orientación visual; el estado real proviene de la API autenticada.
-  if (!orderId && ['aprobado', 'pendiente', 'rechazado'].includes(routeResult)) result = 'desconocido';
+    if (reference) {
+      // El cliente suele volver antes de que llegue el webhook: esta misma
+      // consulta deja el pedido con su estado real.
+      const synced = await syncOrderPayment(reference, payment);
+      result = resultByStatus[synced.status];
+      orderNumber = (await findOrderByReference(reference))?.number ?? '';
+    }
+  } catch (error) {
+    logError('no se pudo verificar el retorno de Mercado Pago', error, { paymentId, reference });
+    result = 'desconocido';
+  }
 
   const content = resultContent[result];
   const ResultIcon = content.icon;
-  const message = `Hola, consulto por mi pago de Boutique del Este${reference ? `, referencia ${reference}` : ''}${orderId ? `, orden ${orderId}` : ''}.`;
+  const message = `Hola, consulto por mi pago de Boutique del Este${reference ? `, referencia ${reference}` : ''}${paymentId ? `, pago ${paymentId}` : ''}.`;
   const whatsappUrl = `https://wa.me/59892143420?text=${encodeURIComponent(message)}`;
 
   return (
@@ -99,10 +95,10 @@ export default async function PaymentResultPage({ params, searchParams }: Paymen
         <p>{content.eyebrow}</p>
         <h1>{content.title}</h1>
         <div>{content.description}</div>
-        {(reference || orderId || amount || orderNumber) && <dl>
+        {(reference || paymentId || amount || orderNumber) && <dl>
           {orderNumber && <><dt>Orden de compra</dt><dd>N.º {orderNumber}</dd></>}
           {reference && <><dt>Referencia</dt><dd>{reference}</dd></>}
-          {orderId && <><dt>Orden Mercado Pago</dt><dd>{orderId}</dd></>}
+          {paymentId && <><dt>Pago Mercado Pago</dt><dd>{paymentId}</dd></>}
           {amount && <><dt>Total</dt><dd>$ {Number(amount).toLocaleString('es-UY')} UYU</dd></>}
         </dl>}
         <div className="payment-result-actions">

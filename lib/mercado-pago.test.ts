@@ -1,6 +1,6 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { products } from '@/lib/catalog';
-import { buildOrderItems, describeFailure, getMercadoPagoOrder, MercadoPagoError, type ProductLookup } from '@/lib/mercado-pago';
+import { buildOrderItems, describeFailure, findPaymentsByReference, getMercadoPagoPayment, MercadoPagoError, type ProductLookup } from '@/lib/mercado-pago';
 
 // El lookup real consulta Postgres. Acá se inyecta uno falso alimentado con el
 // catálogo semilla: la lógica de validación y de precio se prueba pura, sin base.
@@ -212,7 +212,7 @@ describe('el camino real: lo que Mercado Pago contesta llega hasta el error', ()
       400,
     );
 
-    await expect(getMercadoPagoOrder('ORD123')).rejects.toMatchObject({
+    await expect(getMercadoPagoPayment('123')).rejects.toMatchObject({
       status: 400,
       message: expect.stringContaining('No pudimos iniciar el pago'),
       detail: expect.stringContaining('payer_email_invalid'),
@@ -221,23 +221,51 @@ describe('el camino real: lo que Mercado Pago contesta llega hasta el error', ()
 
   it('un 500 de Mercado Pago se traduce a 502, no a 400', async () => {
     respondWith(JSON.stringify({ message: 'internal error' }), 500);
-    await expect(getMercadoPagoOrder('ORD123')).rejects.toMatchObject({ status: 502 });
+    await expect(getMercadoPagoPayment('123')).rejects.toMatchObject({ status: 502 });
   });
 
   it('una respuesta que no es JSON no pierde el cuerpo', async () => {
     respondWith('<html>502 Bad Gateway</html>', 502);
-    await expect(getMercadoPagoOrder('ORD123')).rejects.toMatchObject({
+    await expect(getMercadoPagoPayment('123')).rejects.toMatchObject({
       detail: expect.stringContaining('Bad Gateway'),
     });
   });
 
   it('un 200 con cuerpo ilegible tampoco pasa como éxito', async () => {
     respondWith('no es json', 200);
-    await expect(getMercadoPagoOrder('ORD123')).rejects.toBeInstanceOf(MercadoPagoError);
+    await expect(getMercadoPagoPayment('123')).rejects.toBeInstanceOf(MercadoPagoError);
   });
 
   it('una respuesta válida sigue funcionando', async () => {
-    respondWith(JSON.stringify({ id: 'ORD123', status: 'processed', status_detail: 'accredited' }), 200);
-    await expect(getMercadoPagoOrder('ORD123')).resolves.toMatchObject({ id: 'ORD123' });
+    respondWith(JSON.stringify({ id: 123, status: 'approved', external_reference: 'BDE-1' }), 200);
+    await expect(getMercadoPagoPayment('123')).resolves.toMatchObject({ id: 123, status: 'approved' });
+  });
+
+  it('consulta el pago por su ID en /v1/payments', async () => {
+    const spy = respondWith(JSON.stringify({ id: 123 }), 200);
+    await getMercadoPagoPayment('123');
+    expect(spy.mock.calls[0][0] as string).toBe('https://api.mercadopago.com/v1/payments/123');
+  });
+
+  it('rechaza un ID con caracteres raros antes de llamar a la API', async () => {
+    const spy = respondWith('{}', 200);
+    await expect(getMercadoPagoPayment('1/../2')).rejects.toMatchObject({ status: 400 });
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('busca todos los pagos de una referencia', async () => {
+    const spy = respondWith(
+      JSON.stringify({ results: [{ id: 2, status: 'approved' }, { id: 1, status: 'rejected' }] }),
+      200,
+    );
+    await expect(findPaymentsByReference('BDE-1-abc')).resolves.toHaveLength(2);
+    const url = new URL(spy.mock.calls[0][0] as string);
+    expect(url.pathname).toBe('/v1/payments/search');
+    expect(url.searchParams.get('external_reference')).toBe('BDE-1-abc');
+  });
+
+  it('una búsqueda sin resultados devuelve una lista vacía', async () => {
+    respondWith(JSON.stringify({ paging: { total: 0 } }), 200);
+    await expect(findPaymentsByReference('BDE-1-abc')).resolves.toEqual([]);
   });
 });
