@@ -2,9 +2,21 @@ import 'server-only';
 import configPromise from '@payload-config';
 import { sql } from '@payloadcms/db-postgres';
 import { getPayload } from 'payload';
-import type { CheckoutItemInput, ProductLookup } from '@/lib/mercado-pago';
+import {
+  findPaymentsByReference,
+  type CheckoutItemInput,
+  type MercadoPagoPayment,
+  type ProductLookup,
+} from '@/lib/mercado-pago';
 import { sendPurchaseOrderEmail, smtpConfiguration } from '@/lib/order-email';
-import { getOrderLines, nextOrderStatus, normalizeCustomer, OrderError, type OrderLine } from '@/lib/order-lines';
+import {
+  getOrderLines,
+  nextOrderStatus,
+  normalizeCustomer,
+  OrderError,
+  resolvePaymentStatus,
+  type OrderLine,
+} from '@/lib/order-lines';
 import type { Order } from '@/payload-types';
 
 type PaymentMethod = 'whatsapp' | 'mercado-pago';
@@ -141,16 +153,42 @@ export async function attachMercadoPagoOrder(
   });
 }
 
-export async function findOrderByMercadoPagoId(mercadoPagoOrderId: string): Promise<Order | null> {
+/**
+ * Busca el pedido por la referencia `BDE-...`.
+ *
+ * Es el único dato que comparten el pedido y sus pagos: el pedido guarda el ID
+ * de la preferencia, y cada pago tiene un ID propio distinto.
+ */
+export async function findOrderByReference(externalReference: string): Promise<Order | null> {
   const payload = await payloadClient();
   const result = await payload.find({
     collection: 'orders',
-    where: { mercadoPagoOrderId: { equals: mercadoPagoOrderId } },
+    where: { externalReference: { equals: externalReference } },
     limit: 1,
     depth: 0,
   });
 
   return result.docs[0] ?? null;
+}
+
+/**
+ * Le pregunta a Mercado Pago por los pagos de una referencia y actualiza el pedido.
+ *
+ * `known` es el pago que motivó la consulta (el del webhook o el del retorno):
+ * se suma a la búsqueda porque un pago recién hecho puede tardar en aparecer en
+ * ella.
+ */
+export async function syncOrderPayment(externalReference: string, known?: MercadoPagoPayment) {
+  const found = await findPaymentsByReference(externalReference);
+  const payments = known && !found.some((payment) => String(payment.id) === String(known.id))
+    ? [known, ...found]
+    : found;
+
+  const status = resolvePaymentStatus(payments);
+  const detail = payments.map((payment) => `${payment.id}: ${payment.status} · ${payment.status_detail}`).join(' | ');
+  const result = await recordPaymentResult(externalReference, status, detail || 'sin pagos');
+
+  return { status, ...result };
 }
 
 /**
@@ -160,11 +198,11 @@ export async function findOrderByMercadoPagoId(mercadoPagoOrderId: string): Prom
  * la misma no debe duplicar eventos ni pisar un estado ya resuelto.
  */
 export async function recordPaymentResult(
-  mercadoPagoOrderId: string,
+  externalReference: string,
   status: 'paid' | 'cancelled' | 'pending',
   detail: string,
 ) {
-  const order = await findOrderByMercadoPagoId(mercadoPagoOrderId);
+  const order = await findOrderByReference(externalReference);
   if (!order) return { updated: false, reason: 'sin orden asociada' as const };
 
   const next = nextOrderStatus(order.status, status);

@@ -11,9 +11,7 @@
  */
 import { getPayload } from 'payload';
 import config from '@payload-config';
-import { getMercadoPagoOrder } from '../lib/mercado-pago.js';
-import { recordPaymentResult } from '../lib/orders.js';
-import { orderStatusFrom } from '../lib/order-lines.js';
+import { syncOrderPayment } from '../lib/orders.js';
 
 const HOURS = Number(process.env.RECONCILE_AFTER_HOURS || 2);
 const since = new Date(Date.now() - HOURS * 60 * 60 * 1000).toISOString();
@@ -25,7 +23,7 @@ const pending = await payload.find({
     and: [
       { status: { equals: 'pending' } },
       { paymentMethod: { equals: 'mercado-pago' } },
-      { mercadoPagoOrderId: { exists: true } },
+      { externalReference: { exists: true } },
       { createdAt: { less_than: since } },
     ],
   },
@@ -37,17 +35,15 @@ console.log(`Órdenes pendientes de más de ${HOURS} h: ${pending.docs.length}`)
 
 let resolved = 0;
 for (const order of pending.docs) {
-  const id = order.mercadoPagoOrderId;
-  if (!id) continue;
+  const reference = order.externalReference;
+  if (!reference) continue;
 
   try {
-    const remote = await getMercadoPagoOrder(id);
-    const status = orderStatusFrom(remote.status, remote.status_detail);
-    const result = await recordPaymentResult(id, status, `conciliación · ${remote.status}`);
+    const result = await syncOrderPayment(reference);
 
     if (result.updated) {
       resolved += 1;
-      console.log(`  ${order.number}: ${status}`);
+      console.log(`  ${order.number}: ${result.status}`);
     }
   } catch (error) {
     console.error(`  ${order.number}: no se pudo consultar —`, error instanceof Error ? error.message : error);

@@ -88,9 +88,26 @@ export function nextOrderStatus(
   return incoming;
 }
 
-/** Traduce el estado que reporta Mercado Pago al del pedido. */
-export function orderStatusFrom(status?: string, detail?: string) {
-  if (status === 'processed' && detail === 'accredited') return 'paid' as const;
-  if (status === 'failed' || status === 'canceled') return 'cancelled' as const;
+/** Traduce el estado de un pago de Mercado Pago (Checkout Pro) al del pedido. */
+export function paymentStatusFrom(status?: string) {
+  if (status === 'approved') return 'paid' as const;
+  if (status === 'rejected' || status === 'cancelled' || status === 'refunded' || status === 'charged_back') {
+    return 'cancelled' as const;
+  }
   return 'pending' as const;
+}
+
+/**
+ * Estado del pedido a partir de todos los pagos con su referencia.
+ *
+ * En Checkout Pro el comprador puede reintentar con otra tarjeta, así que una
+ * misma referencia puede tener un pago rechazado y otro aprobado, y los avisos
+ * llegan en cualquier orden. Mirar el conjunto evita que un rechazo tardío
+ * pise un pago aprobado.
+ */
+export function resolvePaymentStatus(payments: Array<{ status?: string }>) {
+  const statuses = payments.map((payment) => paymentStatusFrom(payment.status));
+  if (statuses.includes('paid')) return 'paid' as const;
+  if (statuses.length === 0 || statuses.includes('pending')) return 'pending' as const;
+  return 'cancelled' as const;
 }
