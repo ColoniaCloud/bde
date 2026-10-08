@@ -7,7 +7,7 @@ import { z } from 'zod';
  * Criterio deliberado: los grupos de Mercado Pago y de correo son opcionales,
  * porque la tienda tiene que poder levantar sin ellos y responder 503 con un
  * mensaje entendible (así funciona hoy). Lo que sí se valida es la *forma* de
- * lo que esté presente: un SMTP_PORT que no sea un puerto o un ORDER_COPY_EMAIL
+ * lo que esté presente: un SMTP_PORT que no sea un puerto o un ORDER_FROM_EMAIL
  * que no sea un correo son errores de configuración y conviene que revienten al
  * arrancar, no en medio de una compra.
  */
@@ -55,7 +55,6 @@ const schema = z.object({
   SMTP_USER: blankAsAbsent(z.string().min(1).optional()),
   SMTP_PASS: blankAsAbsent(z.string().min(1).optional()),
   ORDER_FROM_EMAIL: blankAsAbsent(z.email().optional()),
-  ORDER_COPY_EMAIL: blankAsAbsent(z.email().optional()),
 
 });
 

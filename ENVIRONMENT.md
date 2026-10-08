@@ -82,7 +82,8 @@ Empezá con las credenciales de prueba (`TEST-...`).
 | `SMTP_USER` | `ventas@boutiquedeleste.com` |
 | `SMTP_PASS` | Contraseña de esa casilla |
 | `ORDER_FROM_EMAIL` | Remitente del comprobante |
-| `ORDER_COPY_EMAIL` | Recibe copia oculta de cada pedido |
+
+La copia oculta de cada correo va siempre a `contacto@boutiquedeleste.com`.
 
 Si falta alguna, no se emiten comprobantes — **pero el pedido igual queda
 guardado** y aparece en el panel marcado como «comprobante no enviado».

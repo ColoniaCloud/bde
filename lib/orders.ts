@@ -3,7 +3,7 @@ import configPromise from '@payload-config';
 import { sql } from '@payloadcms/db-postgres';
 import { getPayload } from 'payload';
 import type { CheckoutItemInput, ProductLookup } from '@/lib/mercado-pago';
-import { sendPurchaseOrderEmail, smtpConfiguration } from '@/lib/order-email';
+import { sendPaymentConfirmedEmail, sendPurchaseOrderEmail, smtpConfiguration } from '@/lib/order-email';
 import { getOrderLines, nextOrderStatus, normalizeCustomer, OrderError, type OrderLine } from '@/lib/order-lines';
 import type { Order } from '@/payload-types';
 
@@ -171,19 +171,48 @@ export async function recordPaymentResult(
   if (!next) return { updated: false, reason: 'sin cambios' as const };
 
   const payload = await payloadClient();
-  await payload.update({
+  const changedAt = new Date();
+  // La condición sobre el estado evita que dos avisos simultáneos (webhook y
+  // página de retorno) hagan la misma transición y envíen el correo dos veces.
+  const result = await payload.update({
     collection: 'orders',
-    id: order.id,
+    where: { and: [{ id: { equals: order.id } }, { status: { equals: order.status } }] },
     data: {
       status: next,
       events: [
         ...(order.events ?? []),
-        { at: new Date().toISOString(), type: `payment-${next}`, detail },
+        { at: changedAt.toISOString(), type: `payment-${next}`, detail },
       ],
     },
   });
 
+  if (result.docs.length === 0) return { updated: false, reason: 'sin cambios' as const };
+
+  if (next === 'paid') await deliverPaymentConfirmation(order, changedAt);
+
   return { updated: true, number: order.number };
+}
+
+async function deliverPaymentConfirmation(order: Order, paidAt: Date) {
+  try {
+    await sendPaymentConfirmedEmail({
+      number: order.number,
+      customerName: order.customerName,
+      customerEmail: order.customerEmail,
+      lines: order.lines.map(({ title, quantity, total }) => ({ title, quantity, total })),
+      subtotal: order.subtotal,
+      surcharge: order.surcharge,
+      total: order.total,
+      paidAt,
+    }, smtpConfiguration());
+    await appendEvent(order.id, 'payment-email-sent');
+  } catch (error) {
+    // El pago ya quedó registrado; un correo que no sale no debe deshacerlo.
+    const detail = error instanceof Error ? error.message : 'error desconocido';
+    const payload = await payloadClient();
+    payload.logger.error({ err: error, orderId: order.id }, 'No se pudo enviar el aviso de pago acreditado');
+    await appendEvent(order.id, 'payment-email-failed', detail);
+  }
 }
 
 export type { OrderLine };
