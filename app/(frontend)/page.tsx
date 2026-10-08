@@ -32,7 +32,7 @@ export default async function Home({ searchParams }: Props) {
   const sort = isProductSort(orden) ? orden : 'relevance';
 
   const [categories, { products, total, totalPages }] = await Promise.all([
-    getCategories(),
+    getCategories({ topLevelOnly: true }),
     listProducts({ query: q, categorySlug: categoria, page, sort }),
   ]);
 

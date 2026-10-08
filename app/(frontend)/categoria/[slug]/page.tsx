@@ -53,7 +53,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
   const sort = isProductSort(orden) ? orden : 'relevance';
   const [{ products, total, totalPages }, categories] = await Promise.all([
     listProducts({ categorySlug: slug, page, sort }),
-    getCategories(),
+    getCategories({ topLevelOnly: true }),
   ]);
 
   return (

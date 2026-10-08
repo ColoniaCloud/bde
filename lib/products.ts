@@ -83,10 +83,15 @@ function toStoreCategory(doc: PayloadCategory): StoreCategory {
 
 export const PAGE_SIZE = 24;
 
-export async function getCategories(): Promise<StoreCategory[]> {
+/**
+ * Categorías de la tienda en el orden del panel. Con `topLevelOnly` deja afuera
+ * las subcategorías, para los listados que navegan por las secciones principales.
+ */
+export async function getCategories({ topLevelOnly = false } = {}): Promise<StoreCategory[]> {
   const payload = await payloadClient();
   const result = await payload.find({
     collection: 'categories',
+    where: topLevelOnly ? { parent: { exists: false } } : undefined,
     sort: 'order',
     limit: 100,
     depth: 0,
