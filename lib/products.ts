@@ -41,11 +41,13 @@ export type StoreCategory = {
   icon: string;
   tone: string;
   description: string;
+  /** Sólo en subcategorías: la categoría principal a la que pertenecen. */
+  parent?: { name: string; slug: string };
 };
 
 const payloadClient = () => getPayload({ config: configPromise });
 
-function isCategory(value: PayloadProduct['category']): value is PayloadCategory {
+function isCategory(value: number | PayloadCategory | null | undefined): value is PayloadCategory {
   return typeof value === 'object' && value !== null;
 }
 
@@ -78,6 +80,8 @@ function toStoreCategory(doc: PayloadCategory): StoreCategory {
     icon: doc.icon,
     tone: doc.tone,
     description: doc.description,
+    // Con depth 0 el padre llega como id; sólo se expone cuando vino poblado.
+    parent: isCategory(doc.parent) ? { name: doc.parent.name, slug: doc.parent.slug } : undefined,
   };
 }
 
@@ -106,11 +110,25 @@ export async function getCategoryBySlug(slug: string): Promise<StoreCategory | n
     collection: 'categories',
     where: { slug: { equals: slug } },
     limit: 1,
-    depth: 0,
+    depth: 1,
   });
 
   const doc = result.docs[0];
   return doc ? toStoreCategory(doc) : null;
+}
+
+/** Subcategorías de una categoría principal, en el orden del panel. */
+export async function getSubcategories(parentSlug: string): Promise<StoreCategory[]> {
+  const payload = await payloadClient();
+  const result = await payload.find({
+    collection: 'categories',
+    where: { 'parent.slug': { equals: parentSlug } },
+    sort: 'order',
+    limit: 100,
+    depth: 0,
+  });
+
+  return result.docs.map(toStoreCategory);
 }
 
 export async function getProductByCode(code: number): Promise<StoreProduct | null> {
@@ -198,7 +216,13 @@ export async function listProducts({
   const conditions: Where[] = [];
 
   if (categorySlug) {
-    conditions.push({ 'category.slug': { equals: categorySlug } });
+    // Una categoría principal incluye los productos de sus subcategorías.
+    conditions.push({
+      or: [
+        { 'category.slug': { equals: categorySlug } },
+        { 'category.parent.slug': { equals: categorySlug } },
+      ],
+    });
   }
 
   const text = query?.trim();
