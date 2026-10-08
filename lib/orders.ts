@@ -210,11 +210,22 @@ export async function recordPaymentResult(
 
   const payload = await payloadClient();
   const changedAt = new Date();
-  // La condición sobre el estado evita que dos avisos simultáneos (webhook y
-  // página de retorno) hagan la misma transición y envíen el correo dos veces.
-  const result = await payload.update({
+  // La transición se reserva con un UPDATE condicional atómico: el webhook y la
+  // página de retorno pueden llegar a la vez, y sólo quien la gana sigue (envía
+  // el correo y suma a «más vendidos»). Un `payload.update` con `where` no
+  // alcanza, porque primero busca y después escribe por ID.
+  const claimed = await payload.db.drizzle.execute(sql`
+    UPDATE orders SET status = ${next}, updated_at = now()
+    WHERE id = ${order.id} AND status = ${order.status}
+    RETURNING id
+  `);
+  const claimedRows = (claimed as { rows?: unknown[] }).rows ?? [];
+  if (claimedRows.length === 0) return { updated: false, reason: 'sin cambios' as const };
+
+  // Por ID: si algo falla acá, Payload lanza el error en lugar de devolverlo.
+  await payload.update({
     collection: 'orders',
-    where: { and: [{ id: { equals: order.id } }, { status: { equals: order.status } }] },
+    id: order.id,
     data: {
       status: next,
       events: [
@@ -222,9 +233,10 @@ export async function recordPaymentResult(
         { at: changedAt.toISOString(), type: `payment-${next}`, detail },
       ],
     },
+    // El estado ya quedó escrito por el UPDATE de arriba: avisa a los hooks
+    // que esta es la transición real aunque `previousDoc` ya la muestre.
+    context: { claimedStatusTransition: next },
   });
-
-  if (result.docs.length === 0) return { updated: false, reason: 'sin cambios' as const };
 
   if (next === 'paid') await deliverPaymentConfirmation(order, changedAt);
 

@@ -39,10 +39,13 @@ export const Orders: CollectionConfig = {
       // Suma las unidades al contador de "más vendidos" la primera vez que un
       // pedido queda pagado. Compara contra el estado anterior para no sumar
       // de nuevo si el pedido se vuelve a guardar ya pagado (webhook repetido,
-      // edición desde el panel, etc.).
-      async ({ doc, previousDoc, operation, req }) => {
+      // edición desde el panel, etc.). `recordPaymentResult` escribe el estado
+      // con un UPDATE atómico antes de guardar, así que en ese caso
+      // `previousDoc` ya figura pagado y la transición llega en `context`.
+      async ({ doc, previousDoc, operation, req, context }) => {
         if (operation !== 'update') return;
-        if (doc.status !== 'paid' || previousDoc?.status === 'paid') return;
+        if (doc.status !== 'paid') return;
+        if (previousDoc?.status === 'paid' && context?.claimedStatusTransition !== 'paid') return;
 
         for (const line of doc.lines ?? []) {
           await req.payload.db.drizzle.execute(sql`
