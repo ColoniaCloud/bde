@@ -1,13 +1,21 @@
 import 'server-only';
 import configPromise from '@payload-config';
 import { sql } from '@payloadcms/db-postgres';
-import { getPayload } from 'payload';
+import {
+  commitTransaction,
+  createLocalReq,
+  getPayload,
+  initTransaction,
+  killTransaction,
+  type PayloadRequest,
+} from 'payload';
 import {
   findPaymentsByReference,
   type CheckoutItemInput,
   type MercadoPagoPayment,
   type ProductLookup,
 } from '@/lib/mercado-pago';
+import { transactionDb } from '@/lib/db-transaction';
 import { sendPaymentConfirmedEmail, sendPurchaseOrderEmail, smtpConfiguration } from '@/lib/order-email';
 import {
   getOrderLines,
@@ -127,16 +135,48 @@ async function deliverReceipt(
 }
 
 export async function appendEvent(orderId: number, type: string, detail?: string) {
-  const payload = await payloadClient();
-  const current = await payload.findByID({ collection: 'orders', id: orderId, depth: 0 });
-
-  await payload.update({
-    collection: 'orders',
-    id: orderId,
-    data: {
-      events: [...(current.events ?? []), { at: new Date().toISOString(), type, detail: detail ?? null }],
-    },
+  await withLockedOrder(orderId, async (current, req) => {
+    const payload = await payloadClient();
+    await payload.update({
+      collection: 'orders',
+      id: orderId,
+      data: {
+        events: [...(current.events ?? []), { at: new Date().toISOString(), type, detail: detail ?? null }],
+      },
+      req,
+    });
   });
+}
+
+/**
+ * Corre `fn` con la orden bloqueada y releída dentro de una transacción.
+ *
+ * Payload guarda el documento completo, no sólo los campos que cambian: dos
+ * escrituras simultáneas sobre la misma orden (un aviso de pago y el registro
+ * del correo, por ejemplo) se pisarían el estado y el historial. Con la fila
+ * bloqueada la segunda espera y parte de lo que dejó la primera. Si algo
+ * falla, o el proceso muere a mitad, Postgres deshace todo.
+ */
+async function withLockedOrder<T>(orderId: number, fn: (order: Order, req: PayloadRequest) => Promise<T>): Promise<T> {
+  const payload = await payloadClient();
+  const req = await createLocalReq({}, payload);
+  await initTransaction(req);
+
+  try {
+    const tx = await transactionDb(payload, req);
+    // Sin transacción el bloqueo no serviría de nada: mejor fallar que creer
+    // que el cambio está protegido.
+    if (!req.transactionID || tx === payload.db.drizzle) throw new Error('No se pudo abrir la transacción del pedido.');
+    await tx.execute(sql`SELECT id FROM orders WHERE id = ${orderId} FOR UPDATE`);
+
+    const order = await payload.findByID({ collection: 'orders', id: orderId, depth: 0, req });
+    const result = await fn(order, req);
+    await commitTransaction(req);
+    return result;
+  } catch (error) {
+    await killTransaction(req);
+    throw error;
+  }
 }
 
 /** Vincula la orden con la de Mercado Pago, para poder conciliarlas después. */
@@ -202,30 +242,39 @@ export async function recordPaymentResult(
   status: 'paid' | 'cancelled' | 'pending',
   detail: string,
 ) {
-  const order = await findOrderByReference(externalReference);
-  if (!order) return { updated: false, reason: 'sin orden asociada' as const };
+  const found = await findOrderByReference(externalReference);
+  if (!found) return { updated: false, reason: 'sin orden asociada' as const };
+  if (!nextOrderStatus(found.status, status)) return { updated: false, reason: 'sin cambios' as const };
 
-  const next = nextOrderStatus(order.status, status);
-  if (!next) return { updated: false, reason: 'sin cambios' as const };
-
-  const payload = await payloadClient();
+  // El webhook y la página de retorno pueden llegar a la vez: con la fila
+  // bloqueada, el segundo aviso espera, relee y ve el estado ya resuelto. El
+  // hook de «más vendidos» corre dentro de la misma transacción.
   const changedAt = new Date();
-  // La condición sobre el estado evita que dos avisos simultáneos (webhook y
-  // página de retorno) hagan la misma transición y envíen el correo dos veces.
-  const result = await payload.update({
-    collection: 'orders',
-    where: { and: [{ id: { equals: order.id } }, { status: { equals: order.status } }] },
-    data: {
-      status: next,
-      events: [
-        ...(order.events ?? []),
-        { at: changedAt.toISOString(), type: `payment-${next}`, detail },
-      ],
-    },
+  const outcome = await withLockedOrder(found.id, async (order, req) => {
+    const next = nextOrderStatus(order.status, status);
+    if (!next) return null;
+
+    const payload = await payloadClient();
+    await payload.update({
+      collection: 'orders',
+      id: order.id,
+      data: {
+        status: next,
+        events: [
+          ...(order.events ?? []),
+          { at: changedAt.toISOString(), type: `payment-${next}`, detail },
+        ],
+      },
+      req,
+    });
+    return { order, next };
   });
 
-  if (result.docs.length === 0) return { updated: false, reason: 'sin cambios' as const };
+  if (!outcome) return { updated: false, reason: 'sin cambios' as const };
+  const { order, next } = outcome;
 
+  // Recién con el cambio confirmado: un correo no debe salir por un pago que
+  // después se deshizo.
   if (next === 'paid') await deliverPaymentConfirmation(order, changedAt);
 
   return { updated: true, number: order.number };
