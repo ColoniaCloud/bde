@@ -96,8 +96,8 @@ export function describeFailure(body: string, status: number): string {
         )
         .join('; ');
     }
-    if (typeof d === 'object') return JSON.stringify(d);
-    return String(d);
+    // Viene de JSON.parse: lo que queda es objeto, número o booleano.
+    return JSON.stringify(d) ?? null;
   };
 
   const reasons = [

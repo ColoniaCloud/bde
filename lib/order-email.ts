@@ -45,16 +45,19 @@ function escapeHtml(value: string) {
   })[character] || character);
 }
 
+/** Casilla de la tienda: recibe la copia de cada correo y las respuestas de los clientes. */
+export const STORE_EMAIL = 'contacto@boutiquedeleste.com';
+
 export function smtpConfiguration() {
   const env = serverEnv();
   const host = env.SMTP_HOST?.trim();
   const user = env.SMTP_USER?.trim();
   const pass = env.SMTP_PASS;
   const from = env.ORDER_FROM_EMAIL?.trim() || user;
-  const copy = env.ORDER_COPY_EMAIL?.trim();
+  const copy = STORE_EMAIL;
   const port = env.SMTP_PORT;
 
-  if (!host || !user || !pass || !from || !copy) {
+  if (!host || !user || !pass || !from) {
     throw new OrderError('El envío de comprobantes por correo todavía no está configurado.', 503);
   }
 
@@ -68,21 +71,39 @@ export function smtpConfiguration() {
   };
 }
 
-export async function sendPurchaseOrderEmail(order: EmailableOrder, smtp: ReturnType<typeof smtpConfiguration>) {
-  const transporter = nodemailer.createTransport({
+type SmtpConfiguration = ReturnType<typeof smtpConfiguration>;
+
+function createTransport(smtp: SmtpConfiguration) {
+  return nodemailer.createTransport({
     host: smtp.host,
     port: smtp.port,
     secure: smtp.secure,
     auth: smtp.auth,
   });
-  const paymentLabel = order.paymentMethod === 'mercado-pago' ? 'Mercado Pago (pendiente de acreditación)' : 'A coordinar por WhatsApp';
-  const subject = `Orden/boleta de compra N.º ${order.number} · Boutique del Este`;
-  const lineText = order.lines.map((line) => `${line.quantity} × ${line.title} — ${currency.format(line.total)}`).join('\n');
-  const surchargeText = order.surcharge > 0 ? `\nRecargo Mercado Pago: ${currency.format(order.surcharge)}` : '';
-  const text = `Hola ${order.customerName},\n\nRecibimos tu orden/boleta de compra N.º ${order.number}.\n\n${lineText}\n\nSubtotal: ${currency.format(order.subtotal)}${surchargeText}\nTotal: ${currency.format(order.total)}\nForma de pago: ${paymentLabel}\nFecha: ${orderDate.format(order.createdAt)}\n\nConfirmaremos disponibilidad y entrega.\n\nEste comprobante registra tu pedido y no sustituye una factura electrónica fiscal.`;
+}
+
+function orderRowsHtml(order: Pick<EmailableOrder, 'lines' | 'subtotal' | 'surcharge' | 'total'>) {
   const rows = order.lines.map((line) => `<tr><td style="padding:10px 0;border-bottom:1px solid #eadfcd">${line.quantity} × ${escapeHtml(line.title)}</td><td style="padding:10px 0;border-bottom:1px solid #eadfcd;text-align:right;white-space:nowrap">${currency.format(line.total)}</td></tr>`).join('');
   const surchargeRow = order.surcharge > 0 ? `<tr><td style="padding:8px 0">Recargo Mercado Pago</td><td style="padding:8px 0;text-align:right">${currency.format(order.surcharge)}</td></tr>` : '';
-  const html = `<!doctype html><html><body style="margin:0;background:#f7f3eb;color:#24231d;font-family:Arial,sans-serif"><div style="max-width:640px;margin:0 auto;padding:32px 18px"><div style="background:#f2c230;padding:22px 26px"><strong style="font-size:22px">boutique del este</strong></div><div style="background:#fff;padding:28px 26px"><p style="margin-top:0;color:#6c645d;font-size:13px">ORDEN/BOLETA DE COMPRA</p><h1 style="margin:0 0 8px;font-size:26px">N.º ${order.number}</h1><p>Hola ${escapeHtml(order.customerName)}, recibimos tu pedido.</p><table style="width:100%;border-collapse:collapse;font-size:14px">${rows}<tr><td style="padding:12px 0 4px">Subtotal</td><td style="padding:12px 0 4px;text-align:right">${currency.format(order.subtotal)}</td></tr>${surchargeRow}<tr><td style="padding:12px 0;border-top:2px solid #24231d"><strong>Total</strong></td><td style="padding:12px 0;border-top:2px solid #24231d;text-align:right"><strong>${currency.format(order.total)}</strong></td></tr></table><p style="font-size:13px;line-height:1.6"><strong>Forma de pago:</strong> ${paymentLabel}<br><strong>Fecha:</strong> ${orderDate.format(order.createdAt)}</p><p style="font-size:13px;line-height:1.6">Confirmaremos disponibilidad y coordinaremos la entrega.</p><p style="margin-bottom:0;color:#777;font-size:11px;line-height:1.5">Este comprobante registra tu pedido y no sustituye una factura electrónica fiscal.</p></div></div></body></html>`;
+  return `<table style="width:100%;border-collapse:collapse;font-size:14px">${rows}<tr><td style="padding:12px 0 4px">Subtotal</td><td style="padding:12px 0 4px;text-align:right">${currency.format(order.subtotal)}</td></tr>${surchargeRow}<tr><td style="padding:12px 0;border-top:2px solid #24231d"><strong>Total</strong></td><td style="padding:12px 0;border-top:2px solid #24231d;text-align:right"><strong>${currency.format(order.total)}</strong></td></tr></table>`;
+}
+
+function orderLinesText(order: Pick<EmailableOrder, 'lines' | 'subtotal' | 'surcharge' | 'total'>) {
+  const lineText = order.lines.map((line) => `${line.quantity} × ${line.title} — ${currency.format(line.total)}`).join('\n');
+  const surchargeText = order.surcharge > 0 ? `\nRecargo Mercado Pago: ${currency.format(order.surcharge)}` : '';
+  return `${lineText}\n\nSubtotal: ${currency.format(order.subtotal)}${surchargeText}\nTotal: ${currency.format(order.total)}`;
+}
+
+function emailLayout(eyebrow: string, body: string) {
+  return `<!doctype html><html><body style="margin:0;background:#f7f3eb;color:#24231d;font-family:Arial,sans-serif"><div style="max-width:640px;margin:0 auto;padding:32px 18px"><div style="background:#f2c230;padding:22px 26px"><strong style="font-size:22px">boutique del este</strong></div><div style="background:#fff;padding:28px 26px"><p style="margin-top:0;color:#6c645d;font-size:13px">${eyebrow}</p>${body}<p style="margin-bottom:0;color:#777;font-size:11px;line-height:1.5">Este comprobante registra tu pedido y no sustituye una factura electrónica fiscal.</p></div></div></body></html>`;
+}
+
+export async function sendPurchaseOrderEmail(order: EmailableOrder, smtp: SmtpConfiguration) {
+  const transporter = createTransport(smtp);
+  const paymentLabel = order.paymentMethod === 'mercado-pago' ? 'Mercado Pago (pendiente de acreditación)' : 'A coordinar por WhatsApp';
+  const subject = `Orden/boleta de compra N.º ${order.number} · Boutique del Este`;
+  const text = `Hola ${order.customerName},\n\nRecibimos tu orden/boleta de compra N.º ${order.number}.\n\n${orderLinesText(order)}\nForma de pago: ${paymentLabel}\nFecha: ${orderDate.format(order.createdAt)}\n\nConfirmaremos disponibilidad y entrega.\n\nEste comprobante registra tu pedido y no sustituye una factura electrónica fiscal.`;
+  const html = emailLayout('ORDEN/BOLETA DE COMPRA', `<h1 style="margin:0 0 8px;font-size:26px">N.º ${order.number}</h1><p>Hola ${escapeHtml(order.customerName)}, recibimos tu pedido.</p>${orderRowsHtml(order)}<p style="font-size:13px;line-height:1.6"><strong>Forma de pago:</strong> ${paymentLabel}<br><strong>Fecha:</strong> ${orderDate.format(order.createdAt)}</p><p style="font-size:13px;line-height:1.6">Confirmaremos disponibilidad y coordinaremos la entrega.</p>`);
 
   await transporter.sendMail({
     from: `Boutique del Este <${smtp.from}>`,
@@ -95,3 +116,28 @@ export async function sendPurchaseOrderEmail(order: EmailableOrder, smtp: Return
   });
 }
 
+export type PaidOrder = Omit<EmailableOrder, 'createdAt' | 'paymentMethod'> & { paidAt: Date };
+
+/**
+ * Aviso de pago acreditado.
+ *
+ * Se envía una sola vez, cuando la orden pasa a «pagado»: el webhook, la
+ * página de retorno y la conciliación pueden informar el mismo pago, pero sólo
+ * quien hace la transición dispara el correo.
+ */
+export async function sendPaymentConfirmedEmail(order: PaidOrder, smtp: SmtpConfiguration) {
+  const transporter = createTransport(smtp);
+  const subject = `Pago acreditado · Orden N.º ${order.number} · Boutique del Este`;
+  const text = `Hola ${order.customerName},\n\nMercado Pago acreditó el pago de tu orden N.º ${order.number}.\n\n${orderLinesText(order)}\nFecha de acreditación: ${orderDate.format(order.paidAt)}\n\nNos comunicaremos para coordinar la entrega.\n\nEste comprobante registra tu pedido y no sustituye una factura electrónica fiscal.`;
+  const html = emailLayout('PAGO ACREDITADO', `<h1 style="margin:0 0 8px;font-size:26px">N.º ${order.number}</h1><p>Hola ${escapeHtml(order.customerName)}, Mercado Pago acreditó el pago de tu pedido.</p>${orderRowsHtml(order)}<p style="font-size:13px;line-height:1.6"><strong>Fecha de acreditación:</strong> ${orderDate.format(order.paidAt)}</p><p style="font-size:13px;line-height:1.6">Nos comunicaremos para coordinar la entrega.</p>`);
+
+  await transporter.sendMail({
+    from: `Boutique del Este <${smtp.from}>`,
+    to: order.customerEmail,
+    bcc: smtp.copy,
+    replyTo: smtp.copy,
+    subject,
+    text,
+    html,
+  });
+}
