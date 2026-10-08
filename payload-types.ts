@@ -370,7 +370,7 @@ export interface Customer {
 export interface PriceUpdate {
   id: number;
   /**
-   * Poné «Aplicar» y guardá para escribir los precios de las filas tildadas. No hay vuelta atrás automática.
+   * Poné «Aplicar» y guardá para escribir los precios de las filas tildadas. No hay vuelta atrás automática. Si la lectura falló o quedó a medias, poné «Volver a leer el PDF» y guardá: se lee de nuevo el mismo archivo.
    */
   status: 'pending' | 'analyzing' | 'review' | 'apply' | 'applied' | 'failed';
   /**

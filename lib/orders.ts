@@ -223,20 +223,30 @@ export async function recordPaymentResult(
   if (claimedRows.length === 0) return { updated: false, reason: 'sin cambios' as const };
 
   // Por ID: si algo falla acá, Payload lanza el error en lugar de devolverlo.
-  await payload.update({
-    collection: 'orders',
-    id: order.id,
-    data: {
-      status: next,
-      events: [
-        ...(order.events ?? []),
-        { at: changedAt.toISOString(), type: `payment-${next}`, detail },
-      ],
-    },
-    // El estado ya quedó escrito por el UPDATE de arriba: avisa a los hooks
-    // que esta es la transición real aunque `previousDoc` ya la muestre.
-    context: { claimedStatusTransition: next },
-  });
+  try {
+    await payload.update({
+      collection: 'orders',
+      id: order.id,
+      data: {
+        status: next,
+        events: [
+          ...(order.events ?? []),
+          { at: changedAt.toISOString(), type: `payment-${next}`, detail },
+        ],
+      },
+      // El estado ya quedó escrito por el UPDATE de arriba: avisa a los hooks
+      // que esta es la transición real aunque `previousDoc` ya la muestre.
+      context: { claimedStatusTransition: next },
+    });
+  } catch (error) {
+    // Devuelve la reserva: si no, el próximo aviso vería la orden ya resuelta
+    // y nunca registraría el evento, el contador ni el correo.
+    await payload.db.drizzle.execute(sql`
+      UPDATE orders SET status = ${order.status}, updated_at = now()
+      WHERE id = ${order.id} AND status = ${next}
+    `);
+    throw error;
+  }
 
   if (next === 'paid') await deliverPaymentConfirmation(order, changedAt);
 
