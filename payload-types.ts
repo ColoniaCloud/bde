@@ -218,7 +218,7 @@ export interface Category {
    * Parte de la URL: /categoria/<slug>. Cambiarlo rompe enlaces ya indexados.
    */
   slug: string;
-  icon: string;
+  icon: 'sparkles' | 'bath' | 'sun' | 'waves' | 'palette' | 'baby' | 'lightbulb' | 'house' | 'gift';
   tone: 'peach' | 'rose' | 'sand' | 'green' | 'berry' | 'orange';
   /**
    * Dejalo vacío para una categoría principal. Elegí una para convertirla en subcategoría.

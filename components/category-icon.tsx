@@ -10,8 +10,9 @@ import {
   Waves,
   type LucideIcon,
 } from 'lucide-react';
+import type { CategoryIconName } from '@/lib/category-icons';
 
-const icons: Record<string, LucideIcon> = {
+const icons: Record<CategoryIconName, LucideIcon> = {
   baby: Baby,
   bath: Bath,
   gift: Gift,
@@ -23,19 +24,7 @@ const icons: Record<string, LucideIcon> = {
   waves: Waves,
 };
 
-const legacyIcons: Record<string, LucideIcon> = {
-  '✦': Sparkles,
-  '◌': Bath,
-  '☼': Sun,
-  '〰': Waves,
-  '◐': Palette,
-  '⌑': Baby,
-  '◉': Lightbulb,
-  '⌂': House,
-  '◇': Gift,
-};
-
 export function CategoryIcon({ name }: { name: string }) {
-  const Icon = icons[name] ?? legacyIcons[name] ?? Sparkles;
+  const Icon = icons[name as CategoryIconName] ?? Sparkles;
   return <Icon aria-hidden="true" strokeWidth={1.5} />;
 }

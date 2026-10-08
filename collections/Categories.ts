@@ -1,5 +1,6 @@
 import type { CollectionConfig, RelationshipFieldSingleValidation } from 'payload';
 import { isAdmin, isPanel } from '@/lib/access';
+import { CATEGORY_ICONS } from '@/lib/category-icons';
 
 /** Valida que la categoría padre deje un único nivel de subcategorías. */
 const validateParent: RelationshipFieldSingleValidation = async (value, { id, req }) => {
@@ -53,7 +54,14 @@ export const Categories: CollectionConfig = {
       index: true,
       admin: { description: 'Parte de la URL: /categoria/<slug>. Cambiarlo rompe enlaces ya indexados.' },
     },
-    { name: 'icon', type: 'text', label: 'Ícono', required: true },
+    {
+      name: 'icon',
+      type: 'select',
+      label: 'Ícono',
+      required: true,
+      defaultValue: 'sparkles',
+      options: CATEGORY_ICONS.map(({ value, label }) => ({ value, label })),
+    },
     {
       name: 'tone',
       type: 'select',
