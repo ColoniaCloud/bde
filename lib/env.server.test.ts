@@ -23,7 +23,6 @@ const clean = {
   SMTP_USER: undefined,
   SMTP_PASS: undefined,
   ORDER_FROM_EMAIL: undefined,
-  ORDER_COPY_EMAIL: undefined,
   SITE_URL: undefined,
   MERCADOPAGO_ACCESS_TOKEN: undefined,
   MERCADOPAGO_WEBHOOK_SECRET: undefined,
@@ -42,7 +41,7 @@ describe('serverEnv', () => {
 
   it('trata una variable vacía como ausente, no como error', async () => {
     // `SMTP_HOST=` en un .env es la forma habitual de dejar algo sin configurar.
-    const serverEnv = await loadEnv({ ...clean, SMTP_HOST: '', ORDER_COPY_EMAIL: '', SMTP_PORT: '' });
+    const serverEnv = await loadEnv({ ...clean, SMTP_HOST: '', ORDER_FROM_EMAIL: '', SMTP_PORT: '' });
     expect(() => serverEnv()).not.toThrow();
     expect(serverEnv().SMTP_HOST).toBeUndefined();
     expect(serverEnv().SMTP_PORT).toBe(587);
@@ -92,9 +91,9 @@ describe('serverEnv', () => {
       expect(() => serverEnv()).toThrow(/SMTP_PORT/);
     });
 
-    it('un correo de copia que no es un correo', async () => {
-      const serverEnv = await loadEnv({ ...clean, ORDER_COPY_EMAIL: 'freddy-arroba-ejemplo' });
-      expect(() => serverEnv()).toThrow(/ORDER_COPY_EMAIL/);
+    it('un remitente que no es un correo', async () => {
+      const serverEnv = await loadEnv({ ...clean, ORDER_FROM_EMAIL: 'ventas-arroba-ejemplo' });
+      expect(() => serverEnv()).toThrow(/ORDER_FROM_EMAIL/);
     });
 
     it('un SITE_URL que no es una URL', async () => {

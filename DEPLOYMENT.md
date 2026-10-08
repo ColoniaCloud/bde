@@ -86,7 +86,7 @@ mismos lugares.
 Copiar `.env.example` a `.env.production` y completar los valores reales. Ese archivo no se sube a GitHub.
 
 Las variables se validan al arrancar con Zod. Una variable presente pero malformada
-(un `SMTP_PORT` que no es un puerto, un `ORDER_COPY_EMAIL` que no es un correo)
+(un `SMTP_PORT` que no es un puerto, un `ORDER_FROM_EMAIL` que no es un correo)
 detiene la aplicación con un mensaje que dice cuál es. Las opcionales pueden faltar:
 la funcionalidad que dependa de ellas responde 503 en lugar de romper la tienda.
 
@@ -113,7 +113,9 @@ La lista completa de variables, por rubro, está en **`ENVIRONMENT.md`**.
 - `SMTP_HOST`, `SMTP_PORT` y `SMTP_SECURE`
 - `SMTP_USER` y `SMTP_PASS`
 - `ORDER_FROM_EMAIL`: dirección desde la cual se envían los comprobantes
-- `ORDER_COPY_EMAIL`: correo de Freddy que recibe una copia privada de cada orden
+
+La copia oculta de cada correo (y las respuestas de los clientes) va siempre a
+`contacto@boutiquedeleste.com`, fijo en `lib/order-email.ts`.
 
 La numeración correlativa la lleva una secuencia de PostgreSQL, no un archivo en
 disco. Ya no hace falta una carpeta persistente ni `ORDER_DATA_DIR`.
