@@ -153,6 +153,44 @@ Requiere `GROQ_API_KEY`. Sin ella, subir un PDF deja el registro en estado
 **El PDF tiene que tener texto seleccionable.** Un escaneo sin capa de texto se
 rechaza con un mensaje explícito en lugar de devolver una propuesta vacía.
 
+**Las listas largas se leen por tandas.** Una lista entera no entra en un solo
+pedido al modelo, así que el asistente la parte por renglones —nunca al medio de
+una fila— y junta el resultado. Si una tanda falla, falla todo el análisis a
+propósito: una lectura a medias con «Es la lista completa» tildado propondría
+marcar sin stock productos que sí están en el PDF.
+
+Hay un tope de 60 tandas. Un PDF que lo pase se rechaza pidiendo subir la lista
+partida en varios archivos, en lugar de lanzar cien pedidos y agotar la cuota.
+
+**Nada queda esperando para siempre.** Cada tanda tiene dos minutos y la
+lectura completa, veinte; si Groq no responde, el registro termina en «Falló»
+con el motivo en castellano en lugar de quedarse colgado. Y como partir la
+lista hace muchos pedidos seguidos, un «límite de pedidos alcanzado» (429) se
+espera y se reintenta una vez antes de darse por vencido.
+
+**La lectura no ocurre mientras se sube el archivo.** Subir el PDF devuelve
+enseguida, con el registro en «2 · Leyendo el PDF», y el análisis sigue en
+segundo plano dentro del mismo proceso de Node: son varios minutos de llamadas
+al modelo y no pueden tener tomada la transacción de PostgreSQL del alta. El
+resultado —propuesta o error— aparece en el registro al terminar; hay que
+recargar la pantalla para verlo.
+
+Como corre en el proceso de la aplicación, **un reinicio en medio de la lectura
+la interrumpe** y el registro queda en «Leyendo el PDF». No se pierde nada: el
+PDF ya está guardado y ningún precio se escribió. Conviene igual publicar
+cuando no haya una lista a medio leer.
+
+### Volver a leer un PDF
+
+Si la lectura falló —el modelo no estaba disponible, se cortó la red— o quedó a
+medias por un reinicio, **no hace falta volver a subir el archivo**: poné el
+estado en «1 · Volver a leer el PDF» y guardá. Se lee de nuevo el mismo archivo
+y se arma una propuesta nueva.
+
+La propuesta anterior se descarta al hacerlo, a propósito: dejarla sería ofrecer
+para aplicar filas de una lectura que ya se dio por mala. Los precios del
+catálogo no se tocan — releer nunca escribe nada.
+
 ### Recordatorio cada 20 días
 
 ```bash

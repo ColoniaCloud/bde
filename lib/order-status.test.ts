@@ -1,29 +1,47 @@
 import { describe, expect, it } from 'vitest';
-import { nextOrderStatus, orderStatusFrom } from '@/lib/order-lines';
+import { nextOrderStatus, paymentStatusFrom, resolvePaymentStatus } from '@/lib/order-lines';
 
-describe('orderStatusFrom', () => {
-  it('sólo acredita con processed + accredited', () => {
-    expect(orderStatusFrom('processed', 'accredited')).toBe('paid');
+describe('paymentStatusFrom', () => {
+  it('sólo acredita un pago approved', () => {
+    expect(paymentStatusFrom('approved')).toBe('paid');
   });
 
-  it.each([
-    ['processed', 'pending_capture'],
-    ['processed', undefined],
-    ['action_required', 'accredited'],
-  ])('no acredita con %s / %s', (status, detail) => {
-    expect(orderStatusFrom(status, detail)).not.toBe('paid');
+  it.each([['rejected'], ['cancelled'], ['refunded'], ['charged_back']])('cancela con %s', (status) => {
+    expect(paymentStatusFrom(status)).toBe('cancelled');
   });
 
-  it.each([['failed'], ['canceled']])('cancela con %s', (status) => {
-    expect(orderStatusFrom(status, 'x')).toBe('cancelled');
-  });
-
-  it.each([['created'], ['processing'], ['action_required'], [undefined], ['inventado']])(
-    'deja pendiente lo que no reconoce: %s',
+  it.each([['pending'], ['in_process'], ['authorized'], ['in_mediation'], [undefined], ['inventado']])(
+    'deja pendiente lo que no está resuelto: %s',
     (status) => {
-      expect(orderStatusFrom(status, 'x')).toBe('pending');
+      expect(paymentStatusFrom(status)).toBe('pending');
     },
   );
+});
+
+describe('resolvePaymentStatus', () => {
+  it('sin pagos todavía, el pedido sigue pendiente', () => {
+    expect(resolvePaymentStatus([])).toBe('pending');
+  });
+
+  it('un rechazo seguido de un reintento aprobado deja el pedido pagado', () => {
+    expect(resolvePaymentStatus([{ status: 'rejected' }, { status: 'approved' }])).toBe('paid');
+  });
+
+  it('un rechazo que llega tarde no pisa un pago aprobado', () => {
+    expect(resolvePaymentStatus([{ status: 'approved' }, { status: 'rejected' }])).toBe('paid');
+  });
+
+  it('un rechazo con otro intento en curso sigue pendiente', () => {
+    expect(resolvePaymentStatus([{ status: 'rejected' }, { status: 'in_process' }])).toBe('pending');
+  });
+
+  it('si todos los intentos fallaron, se cancela', () => {
+    expect(resolvePaymentStatus([{ status: 'rejected' }, { status: 'cancelled' }])).toBe('cancelled');
+  });
+
+  it('un pago devuelto ya no cuenta como pagado', () => {
+    expect(resolvePaymentStatus([{ status: 'refunded' }])).toBe('cancelled');
+  });
 });
 
 describe('nextOrderStatus', () => {

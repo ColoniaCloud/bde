@@ -95,20 +95,26 @@ guardado** y aparece en el panel marcado como «comprobante no enviado».
 | Variable | Valor |
 |---|---|
 | `GROQ_API_KEY` | Clave de la API de Groq |
-| `GROQ_MODEL` | `qwen/qwen3.6-27b` |
+| `GROQ_MODEL` | Vacía (se elige solo) |
 
 Sin la clave, subir un PDF queda en estado «Falló»; el resto de la tienda no se
 afecta.
 
-Groq depreca modelos seguido. Confirmá el identificador antes de desplegar:
+**`GROQ_MODEL` conviene dejarla vacía.** Sin valor, el asistente le pregunta a
+Groq qué modelos tiene habilitados la cuenta y elige uno. Fijar un id a mano
+parece más prolijo pero tiene fecha de vencimiento: Groq depreca modelos
+seguido y el único síntoma es un 404 al subir un PDF. Ya pasó — el asistente
+estuvo fuera de servicio con un id que la cuenta no tenía.
+
+Si igual querés fijarlo, mirá primero qué existe de verdad:
 
 ```bash
 curl -s https://api.groq.com/openai/v1/models \
   -H "Authorization: Bearer $GROQ_API_KEY" | grep -o '"id":"[^"]*"'
 ```
 
-Verificado el 2026-09-10: `qwen/qwen3.6-27b` y `qwen/qwen3.8-27b` sirven los dos
-y son intercambiables sin tocar código.
+Cuando Groq rechaza el modelo, el detalle del error en el panel lista los
+identificadores disponibles en la cuenta: se corrige sin salir a buscarlos.
 
 ---
 

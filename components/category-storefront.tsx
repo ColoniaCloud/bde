@@ -4,24 +4,38 @@ import Link from 'next/link';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { CategoryIcon } from '@/components/category-icon';
 import { ProductCard } from '@/components/product-card';
+import { SortSelect } from '@/components/sort-select';
 import { StoreFooter } from '@/components/store-footer';
 import { StoreHeader } from '@/components/store-header';
+import type { ProductSort } from '@/lib/product-sort';
 import type { StoreCategory, StoreProduct } from '@/lib/products';
 
 type Props = {
   category: StoreCategory;
+  subcategories: StoreCategory[];
   otherCategories: StoreCategory[];
   products: StoreProduct[];
   total: number;
   page: number;
   totalPages: number;
+  sort: ProductSort;
 };
 
-export function CategoryStorefront({ category, otherCategories, products, total, page, totalPages }: Props) {
+function pageHref(slug: string, page: number, sort: ProductSort) {
+  const search = new URLSearchParams();
+  if (page > 1) search.set('pagina', String(page));
+  if (sort !== 'relevance') search.set('orden', sort);
+  const query = search.toString();
+  return `/categoria/${slug}${query ? `?${query}` : ''}`;
+}
+
+export function CategoryStorefront({ category, subcategories, otherCategories, products, total, page, totalPages, sort }: Props) {
   return <main>
     <StoreHeader />
     <div className="breadcrumbs section-shell">
-      <Link href="/">Inicio</Link><span>›</span><strong>{category.name}</strong>
+      <Link href="/">Inicio</Link><span>›</span>
+      {category.parent && <><Link href={`/categoria/${category.parent.slug}`}>{category.parent.name}</Link><span>›</span></>}
+      <strong>{category.name}</strong>
     </div>
 
     <section className={`category-hero ${category.tone}`}>
@@ -34,8 +48,12 @@ export function CategoryStorefront({ category, otherCategories, products, total,
     </section>
 
     <section className="products-section section-shell category-products">
-      <div className="section-heading">
+      <div className="section-heading products-heading">
         <div><p>{total} productos</p><h2>Catálogo {category.name}</h2></div>
+        <div className="products-controls">
+          {subcategories.length > 0 && <SubcategoryPills category={category} subcategories={subcategories} sort={sort} />}
+          <SortSelect value={sort} />
+        </div>
       </div>
       {products.length ? <>
         <div className="product-grid">
@@ -44,11 +62,11 @@ export function CategoryStorefront({ category, otherCategories, products, total,
         {totalPages > 1 && (
           <nav className="catalog-pagination" aria-label="Páginas de la categoría">
             {page > 1
-              ? <Link href={`/categoria/${category.slug}?pagina=${page - 1}`}><ArrowLeft aria-hidden="true" /> anterior</Link>
+              ? <Link href={pageHref(category.slug, page - 1, sort)}><ArrowLeft aria-hidden="true" /> anterior</Link>
               : <span className="disabled"><ArrowLeft aria-hidden="true" /> anterior</span>}
             <span>Página {page} de {totalPages}</span>
             {page < totalPages
-              ? <Link href={`/categoria/${category.slug}?pagina=${page + 1}`}>siguiente <ArrowRight aria-hidden="true" /></Link>
+              ? <Link href={pageHref(category.slug, page + 1, sort)}>siguiente <ArrowRight aria-hidden="true" /></Link>
               : <span className="disabled">siguiente <ArrowRight aria-hidden="true" /></span>}
           </nav>
         )}
@@ -73,4 +91,28 @@ export function CategoryStorefront({ category, otherCategories, products, total,
 
     <StoreFooter />
   </main>;
+}
+
+/** Enlaces entre la categoría principal y sus subcategorías; conservan el orden elegido. */
+function SubcategoryPills({ category, subcategories, sort }: { category: StoreCategory; subcategories: StoreCategory[]; sort: ProductSort }) {
+  const main = category.parent ?? category;
+  const items = [{ slug: main.slug, name: 'Todo' }, ...subcategories];
+
+  return (
+    <nav className="filter-pills" aria-label={`Subcategorías de ${main.name}`}>
+      {items.map((item) => {
+        const current = item.slug === category.slug;
+        return (
+          <Link
+            key={item.slug}
+            className={current ? 'active' : ''}
+            href={pageHref(item.slug, 1, sort)}
+            aria-current={current ? 'page' : undefined}
+          >
+            {item.name}
+          </Link>
+        );
+      })}
+    </nav>
+  );
 }

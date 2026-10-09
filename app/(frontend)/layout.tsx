@@ -1,7 +1,10 @@
 import type { Metadata } from 'next';
 import Script from 'next/script';
+import { connection } from 'next/server';
 import { AuthProvider } from '@/components/auth-provider';
+import { NavCategoriesProvider } from '@/components/nav-categories';
 import { StoreProvider } from '@/components/store-provider';
+import { getCategories, type StoreCategory } from '@/lib/products';
 import { SITE_DESCRIPTION, SITE_NAME, SITE_URL } from '@/lib/site';
 import './globals.css';
 
@@ -74,12 +77,41 @@ const storeStructuredData = {
   },
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+/**
+ * Categorías para el menú y el pie. `connection()` evita que se lean durante el
+ * build: las páginas fijas (las legales) quedarían con el menú congelado, o
+ * vacío si el build corre antes de cargar el catálogo, como en el CI.
+ *
+ * Si la base no responde, el menú sale sin categorías en lugar de tirar abajo
+ * también las páginas que no dependen del catálogo.
+ */
+async function getNavCategories(): Promise<StoreCategory[]> {
+  await connection();
+  try {
+    return await getCategories({ topLevelOnly: true });
+  } catch (error) {
+    console.error('No se pudieron leer las categorías del menú', error);
+    return [];
+  }
+}
+
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const navCategories = await getNavCategories();
+
   return (
     <html lang="es-UY">
       <head>
         <Script id="google-tag-manager" strategy="afterInteractive">
           {`(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','GTM-T4XRFJRK');`}
+        </Script>
+        {/* Google Analytics 4 directo, además del contenedor de Tag Manager. */}
+        <Script
+          id="google-analytics-loader"
+          src="https://www.googletagmanager.com/gtag/js?id=G-11K0P2W1NV"
+          strategy="afterInteractive"
+        />
+        <Script id="google-analytics" strategy="afterInteractive">
+          {`window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-11K0P2W1NV');`}
         </Script>
       </head>
       <body>
@@ -97,7 +129,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           dangerouslySetInnerHTML={{ __html: JSON.stringify(storeStructuredData).replace(/</g, '\\u003c') }}
         />
         <AuthProvider>
-          <StoreProvider>{children}</StoreProvider>
+          <NavCategoriesProvider categories={navCategories}>
+            <StoreProvider>{children}</StoreProvider>
+          </NavCategoriesProvider>
         </AuthProvider>
       </body>
     </html>

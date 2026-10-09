@@ -40,3 +40,7 @@ private/
 e2e-results/
 playwright-report/
 test-results/
+
+# Instrucciones para agentes que genera `next dev`
+/AGENTS.md
+/CLAUDE.md

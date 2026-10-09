@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
+import { after } from 'next/server';
 import { ProductDetail } from '@/components/product-detail';
-import { getProductByCode, getRelatedProducts } from '@/lib/products';
+import { getProductByCode, getRelatedProducts, incrementViewCount } from '@/lib/products';
 import { SITE_NAME, SITE_URL } from '@/lib/site';
 
 type Props = { params: Promise<{ slug: string }> };
@@ -41,6 +42,9 @@ export default async function ProductPage({ params }: Props) {
   const code = parseCode(slug);
   const product = code ? await getProductByCode(code) : null;
   if (!product) notFound();
+
+  // Después de enviar la respuesta: no vale la pena demorar la ficha por esto.
+  after(() => incrementViewCount(product.code).catch(() => {}));
 
   const related = await getRelatedProducts(product);
   const image = product.image.startsWith('http')

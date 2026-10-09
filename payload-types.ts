@@ -186,6 +186,14 @@ export interface Product {
       }[]
     | null;
   /**
+   * Lo suma automáticamente cada pedido marcado como pagado.
+   */
+  soldCount?: number | null;
+  /**
+   * Se incrementa cada vez que alguien abre la ficha del producto.
+   */
+  viewCount?: number | null;
+  /**
    * Lo escribe el asistente de precios de la fase 4. No se edita a mano.
    */
   priceHistory?:
@@ -210,8 +218,12 @@ export interface Category {
    * Parte de la URL: /categoria/<slug>. Cambiarlo rompe enlaces ya indexados.
    */
   slug: string;
-  icon: string;
+  icon: 'sparkles' | 'bath' | 'sun' | 'waves' | 'palette' | 'baby' | 'lightbulb' | 'house' | 'gift';
   tone: 'peach' | 'rose' | 'sand' | 'green' | 'berry' | 'orange';
+  /**
+   * Dejalo vacío para una categoría principal. Elegí una para convertirla en subcategoría.
+   */
+  parent?: (number | null) | Category;
   description: string;
   /**
    * Define en qué orden aparecen las categorías en la tienda.
@@ -362,7 +374,7 @@ export interface Customer {
 export interface PriceUpdate {
   id: number;
   /**
-   * Poné «Aplicar» y guardá para escribir los precios de las filas tildadas. No hay vuelta atrás automática.
+   * Poné «Aplicar» y guardá para escribir los precios de las filas tildadas. No hay vuelta atrás automática. Si la lectura falló o quedó a medias, poné «Volver a leer el PDF» y guardá: se lee de nuevo el mismo archivo.
    */
   status: 'pending' | 'analyzing' | 'review' | 'apply' | 'applied' | 'failed';
   /**
@@ -556,6 +568,8 @@ export interface ProductsSelect<T extends boolean = true> {
         text?: T;
         id?: T;
       };
+  soldCount?: T;
+  viewCount?: T;
   priceHistory?:
     | T
     | {
@@ -576,6 +590,7 @@ export interface CategoriesSelect<T extends boolean = true> {
   slug?: T;
   icon?: T;
   tone?: T;
+  parent?: T;
   description?: T;
   order?: T;
   updatedAt?: T;

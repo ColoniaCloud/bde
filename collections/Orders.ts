@@ -1,4 +1,6 @@
+import { sql } from '@payloadcms/db-postgres';
 import type { CollectionConfig } from 'payload';
+import { transactionDb } from '@/lib/db-transaction';
 
 /**
  * Los pedidos.
@@ -33,6 +35,27 @@ export const Orders: CollectionConfig = {
   },
   defaultSort: '-createdAt',
   timestamps: true,
+  hooks: {
+    afterChange: [
+      // Suma las unidades al contador de "más vendidos" la primera vez que un
+      // pedido queda pagado. Compara contra el estado anterior para no sumar
+      // de nuevo si el pedido se vuelve a guardar ya pagado (webhook repetido,
+      // edición desde el panel, etc.). Usa la transacción del guardado cuando la
+      // hay, para que el contador se deshaga junto con el pedido si algo falla.
+      async ({ doc, previousDoc, operation, req }) => {
+        if (operation !== 'update') return;
+        if (doc.status !== 'paid' || previousDoc?.status === 'paid') return;
+
+        const db = await transactionDb(req.payload, req);
+        for (const line of doc.lines ?? []) {
+          await db.execute(sql`
+            UPDATE products SET sold_count = COALESCE(sold_count, 0) + ${line.quantity}
+            WHERE code = ${line.code}
+          `);
+        }
+      },
+    ],
+  },
   fields: [
     {
       type: 'row',

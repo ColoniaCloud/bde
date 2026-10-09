@@ -1,12 +1,13 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { CategoryStorefront } from '@/components/category-storefront';
-import { getCategories, getCategoryBySlug, listProducts } from '@/lib/products';
+import { isProductSort } from '@/lib/product-sort';
+import { getCategories, getCategoryBySlug, getSubcategories, listProducts } from '@/lib/products';
 import { SITE_NAME } from '@/lib/site';
 
 type Props = {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ pagina?: string }>;
+  searchParams: Promise<{ pagina?: string; orden?: string }>;
 };
 
 /**
@@ -44,24 +45,31 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function CategoryPage({ params, searchParams }: Props) {
   const { slug } = await params;
-  const { pagina } = await searchParams;
+  const { pagina, orden } = await searchParams;
   const category = await getCategoryBySlug(slug);
   if (!category) notFound();
 
   const page = Math.max(1, Number(pagina) || 1);
-  const [{ products, total, totalPages }, categories] = await Promise.all([
-    listProducts({ categorySlug: slug, page }),
-    getCategories(),
+  const sort = isProductSort(orden) ? orden : 'relevance';
+  // En una subcategoría las pastillas muestran a sus hermanas, con la principal
+  // como «todo»; en una principal, a sus propias subcategorías.
+  const familySlug = category.parent?.slug ?? slug;
+  const [{ products, total, totalPages }, categories, subcategories] = await Promise.all([
+    listProducts({ categorySlug: slug, page, sort }),
+    getCategories({ topLevelOnly: true }),
+    getSubcategories(familySlug),
   ]);
 
   return (
     <CategoryStorefront
       category={category}
-      otherCategories={categories.filter((item) => item.slug !== slug)}
+      subcategories={subcategories}
+      otherCategories={categories.filter((item) => item.slug !== familySlug)}
       products={products}
       total={total}
       page={page}
       totalPages={totalPages}
+      sort={sort}
     />
   );
 }
