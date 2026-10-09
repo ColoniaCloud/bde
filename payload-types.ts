@@ -218,8 +218,12 @@ export interface Category {
    * Parte de la URL: /categoria/<slug>. Cambiarlo rompe enlaces ya indexados.
    */
   slug: string;
-  icon: string;
+  icon: 'sparkles' | 'bath' | 'sun' | 'waves' | 'palette' | 'baby' | 'lightbulb' | 'house' | 'gift';
   tone: 'peach' | 'rose' | 'sand' | 'green' | 'berry' | 'orange';
+  /**
+   * Dejalo vacío para una categoría principal. Elegí una para convertirla en subcategoría.
+   */
+  parent?: (number | null) | Category;
   description: string;
   /**
    * Define en qué orden aparecen las categorías en la tienda.
@@ -586,6 +590,7 @@ export interface CategoriesSelect<T extends boolean = true> {
   slug?: T;
   icon?: T;
   tone?: T;
+  parent?: T;
   description?: T;
   order?: T;
   updatedAt?: T;

@@ -4,25 +4,17 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { Heart, Menu, MessageCircle, ShoppingBag, X } from 'lucide-react';
 import { AccountButton } from '@/components/account-button';
+import { useNavCategories } from '@/components/nav-categories';
 import { SearchBox } from '@/components/search-box';
 import { useStore } from '@/components/store-provider';
-
-const navItems = [
-  ['promociones', '/#productos'],
-  ['perfumería', '/categoria/perfumeria'],
-  ['cuerpo y baño', '/categoria/cuerpo-y-bano'],
-  ['cabello', '/categoria/cabello'],
-  ['rostro', '/categoria/rostro'],
-  ['maquillaje', '/categoria/maquillaje'],
-  ['infantil', '/categoria/infantil'],
-  ['luz roja', '/categoria/luz-roja'],
-  ['hogar', '/categoria/hogar'],
-  ['regalos', '/categoria/regalos'],
-];
 
 export function StoreHeader() {
   const [menuOpen, setMenuOpen] = useState(false);
   const { cartCount, openCart, showNotice } = useStore();
+  const navItems = [
+    ['promociones', '/#productos'],
+    ...useNavCategories().map((category) => [category.name.toLowerCase(), `/categoria/${category.slug}`]),
+  ];
 
   return <>
     <div className="top-strip"><span>Envíos en un máximo de 48 h en Maldonado y Punta del Este</span><span>Precios en pesos uruguayos</span><span>Stock sujeto a confirmación</span></div>
