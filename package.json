@@ -60,5 +60,9 @@
     "typescript": "5.9.3",
     "vitest": "^3.2.7",
     "wait-on": "^9.1.0"
+  },
+  "overrides": {
+    "undici": "7.30.0",
+    "dompurify": "3.4.16"
   }
 }
