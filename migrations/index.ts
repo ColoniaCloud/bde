@@ -9,6 +9,7 @@ import * as migration_20261002_003347_add_product_counters from './20261002_0033
 import * as migration_20261008_224216_category_parent from './20261008_224216_category_parent';
 import * as migration_20261008_224349_category_icon_select from './20261008_224349_category_icon_select';
 import * as migration_20261009_230441_payload_3_90_reset_password from './20261009_230441_payload_3_90_reset_password';
+import * as migration_20261010_010803_customer_picture from './20261010_010803_customer_picture';
 
 export const migrations = [
   {
@@ -64,6 +65,11 @@ export const migrations = [
   {
     up: migration_20261009_230441_payload_3_90_reset_password.up,
     down: migration_20261009_230441_payload_3_90_reset_password.down,
-    name: '20261009_230441_payload_3_90_reset_password'
+    name: '20261009_230441_payload_3_90_reset_password',
+  },
+  {
+    up: migration_20261010_010803_customer_picture.up,
+    down: migration_20261010_010803_customer_picture.down,
+    name: '20261010_010803_customer_picture'
   },
 ];

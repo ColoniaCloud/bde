@@ -48,6 +48,7 @@ const profileSchema = z.object({
   email: z.email(),
   email_verified: z.union([z.boolean(), z.literal('true'), z.literal('false')]).optional(),
   name: z.string().optional(),
+  picture: z.url().optional(),
 });
 
 export type GoogleProfile = z.infer<typeof profileSchema>;

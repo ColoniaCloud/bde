@@ -70,6 +70,19 @@ export const Customers: CollectionConfig = {
       },
     },
     {
+      name: 'picture',
+      type: 'text',
+      label: 'Foto',
+      admin: {
+        readOnly: true,
+        description: 'La foto de perfil de Google. Se actualiza en cada ingreso.',
+      },
+      access: {
+        // Viene de Google: el cliente la ve pero no la puede reemplazar.
+        update: () => false,
+      },
+    },
+    {
       name: 'favorites',
       type: 'json',
       label: 'Favoritos',

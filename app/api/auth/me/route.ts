@@ -13,7 +13,7 @@ export async function GET() {
   const { user } = await payload.auth({ headers: await nextHeaders() });
 
   const customer = user?.collection === 'customers'
-    ? { id: user.id, email: user.email, name: user.name ?? null }
+    ? { id: user.id, email: user.email, name: user.name ?? null, picture: user.picture ?? null }
     : null;
 
   return NextResponse.json({ customer, googleEnabled: googleConfigured() });

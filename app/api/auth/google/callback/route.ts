@@ -5,6 +5,7 @@ import { logError, logWarning } from '@/lib/logger';
 import { getSiteUrl } from '@/lib/site-url';
 import { verifyState } from '@/lib/oauth-state';
 import { signInWithGoogleProfile } from '@/lib/customers';
+import { setSessionCookie } from '@/lib/session-cookie';
 
 export const runtime = 'nodejs';
 
@@ -41,13 +42,7 @@ export async function GET(request: Request) {
     const { token } = await signInWithGoogleProfile(profile);
 
     const response = NextResponse.redirect(`${getSiteUrl()}/cuenta`);
-    response.cookies.set('payload-token', token, {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: env.NODE_ENV === 'production',
-      path: '/',
-      maxAge: 60 * 60 * 24 * 30,
-    });
+    setSessionCookie(response, token);
     response.cookies.delete('oauth_state');
 
     return response;

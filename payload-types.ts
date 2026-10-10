@@ -335,6 +335,10 @@ export interface Customer {
   provider?: ('password' | 'google') | null;
   googleId?: string | null;
   /**
+   * La foto de perfil de Google. Se actualiza en cada ingreso.
+   */
+  picture?: string | null;
+  /**
    * Códigos de producto. Se sincronizan desde el navegador al ingresar.
    */
   favorites?:
@@ -645,6 +649,7 @@ export interface CustomersSelect<T extends boolean = true> {
   name?: T;
   provider?: T;
   googleId?: T;
+  picture?: T;
   favorites?: T;
   updatedAt?: T;
   createdAt?: T;

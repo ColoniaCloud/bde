@@ -20,7 +20,12 @@ export function createState(secret: string, now = Date.now()): string {
   return `${payload}.${signature}`;
 }
 
-export function verifyState(secret: string, state: string | null, now = Date.now()): boolean {
+export function verifyState(
+  secret: string,
+  state: string | null,
+  now = Date.now(),
+  maxAgeMs = MAX_AGE_MS,
+): boolean {
   if (!state) return false;
 
   const parts = state.split('.');
@@ -33,7 +38,7 @@ export function verifyState(secret: string, state: string | null, now = Date.now
   const issuedAt = Number(timestamp);
   if (!Number.isSafeInteger(issuedAt)) return false;
   // Un state viejo no sirve, y uno del futuro es señal de manipulación.
-  if (now - issuedAt > MAX_AGE_MS || issuedAt > now + 60_000) return false;
+  if (now - issuedAt > maxAgeMs || issuedAt > now + 60_000) return false;
 
   const expected = createHmac('sha256', secret).update(`${nonce}.${timestamp}`).digest('hex');
   return timingSafeEqual(Buffer.from(expected, 'hex'), Buffer.from(signature, 'hex'));

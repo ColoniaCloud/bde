@@ -6,6 +6,7 @@ export type Customer = {
   id: number;
   email: string;
   name?: string | null;
+  picture?: string | null;
 };
 
 type AuthContextValue = {

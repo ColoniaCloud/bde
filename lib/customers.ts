@@ -2,7 +2,8 @@ import 'server-only';
 import { randomBytes } from 'node:crypto';
 import configPromise from '@payload-config';
 import { getPayload } from 'payload';
-import type { GoogleProfile } from '@/lib/google-oauth';
+/** Lo que necesitamos de Google, venga por redirección o por «Continuar como…». */
+type GoogleIdentity = { sub: string; email: string; name?: string; picture?: string };
 
 /** Alta e ingreso de clientes. */
 
@@ -16,7 +17,7 @@ const payloadClient = () => getPayload({ config: configPromise });
  * registrado con correo y contraseña y luego entra con Google, se vincula la
  * misma cuenta en lugar de crear una duplicada.
  */
-export async function signInWithGoogleProfile(profile: GoogleProfile) {
+export async function signInWithGoogleProfile(profile: GoogleIdentity) {
   const payload = await payloadClient();
   const email = profile.email.toLowerCase();
 
@@ -45,6 +46,8 @@ export async function signInWithGoogleProfile(profile: GoogleProfile) {
         googleId: profile.sub,
         provider: 'google',
         name: found.name || profile.name,
+        // La foto sí se actualiza: si la persona la cambia en Google, acá también.
+        picture: profile.picture ?? found.picture,
       },
       overrideAccess: true,
     });
@@ -57,6 +60,7 @@ export async function signInWithGoogleProfile(profile: GoogleProfile) {
         name: profile.name,
         provider: 'google',
         googleId: profile.sub,
+        picture: profile.picture,
       },
       overrideAccess: true,
     });
@@ -68,7 +72,7 @@ export async function signInWithGoogleProfile(profile: GoogleProfile) {
     overrideAccess: true,
   });
 
-  if (!result.token) throw new Error('No se pudo emitir la sesión.');
+  if (!result.token || !result.user) throw new Error('No se pudo emitir la sesión.');
 
   return { customer: result.user, token: result.token };
 }

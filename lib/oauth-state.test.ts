@@ -33,6 +33,11 @@ describe('state de OAuth', () => {
       expect(verifyState(SECRET, old)).toBe(false);
     });
 
+    it('uno de una hora si se pide un margen mayor, como el nonce de One Tap', () => {
+      const old = createState(SECRET, Date.now() - 60 * 60 * 1000);
+      expect(verifyState(SECRET, old, Date.now(), 2 * 60 * 60 * 1000)).toBe(true);
+    });
+
     it('uno todavía vigente al filo', () => {
       const almost = createState(SECRET, Date.now() - 9 * 60 * 1000);
       expect(verifyState(SECRET, almost)).toBe(true);
@@ -54,6 +59,11 @@ describe('state de OAuth', () => {
       ['con marca de tiempo no numérica', `${'0'.repeat(32)}.ayer.${'a'.repeat(64)}`],
     ])('uno %s', (_label, state) => {
       expect(verifyState(SECRET, state)).toBe(false);
+    });
+
+    it('uno más viejo que el margen pedido, aunque entre en el de por defecto', () => {
+      const state = createState(SECRET, Date.now() - 5 * 60 * 1000);
+      expect(verifyState(SECRET, state, Date.now(), 60 * 1000)).toBe(false);
     });
 
     it('una firma del largo correcto pero equivocada, sin explotar', () => {
