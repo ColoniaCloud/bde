@@ -2,7 +2,12 @@ import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { signInWithGoogleProfile } from '@/lib/customers';
 import { serverEnv } from '@/lib/env.server';
-import { GoogleIdTokenError, googleKeys, verifyGoogleIdToken } from '@/lib/google-id-token';
+import {
+  GoogleIdTokenError,
+  googleKeys,
+  verifyGoogleIdToken,
+  verifyGoogleIdTokenWithTokenInfo,
+} from '@/lib/google-id-token';
 import { googleConfigured } from '@/lib/google-oauth';
 import { logError, logWarning } from '@/lib/logger';
 import { verifyState } from '@/lib/oauth-state';
@@ -22,6 +27,23 @@ export const dynamic = 'force-dynamic';
  * sitio ajeno intente enviarnos para iniciar sesión con *su* cuenta (CSRF de
  * login), no trae el nonce de la cookie de este navegador.
  */
+
+/**
+ * Verifica con las claves públicas de Google y, si no se pueden descargar, con
+ * el endpoint tokeninfo de Google. En Hostinger la descarga de las claves llegó
+ * a fallar; así el ingreso no depende de un único servidor de Google.
+ */
+async function verifyCredential(credential: string, clientId: string, nonce: string, baseUrl?: string) {
+  try {
+    return await verifyGoogleIdToken(credential, { clientId, nonce, keys: googleKeys(baseUrl) });
+  } catch (error) {
+    if (!(error instanceof GoogleIdTokenError) || error.reason !== 'claves-inaccesibles') throw error;
+    logWarning(`One Tap sin claves de Google, se verifica con tokeninfo: ${error.detail ?? 'sin detalle'}`, {
+      detail: error.detail,
+    });
+    return verifyGoogleIdTokenWithTokenInfo(credential, { clientId, nonce, baseUrl });
+  }
+}
 
 export async function POST(request: Request) {
   if (!googleConfigured()) {
@@ -53,11 +75,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const profile = await verifyGoogleIdToken(credential, {
-      clientId: env.GOOGLE_CLIENT_ID!,
-      nonce,
-      keys: googleKeys(env.GOOGLE_BASE_URL),
-    });
+    const profile = await verifyCredential(credential, env.GOOGLE_CLIENT_ID!, nonce, env.GOOGLE_BASE_URL);
     const { customer, token } = await signInWithGoogleProfile(profile);
 
     const response = NextResponse.json({

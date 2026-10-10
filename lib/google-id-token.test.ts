@@ -1,6 +1,11 @@
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT, type JWTVerifyGetKey } from 'jose';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { GoogleIdTokenError, verifyGoogleIdToken } from '@/lib/google-id-token';
+import {
+  GoogleIdTokenError,
+  googleKeys,
+  verifyGoogleIdToken,
+  verifyGoogleIdTokenWithTokenInfo,
+} from '@/lib/google-id-token';
 
 const CLIENT_ID = 'cliente-de-prueba.apps.googleusercontent.com';
 const NONCE = 'nonce-de-este-navegador';
@@ -10,6 +15,7 @@ type Signer = Awaited<ReturnType<typeof generateKeyPair>>['privateKey'];
 let googleKey: Signer;
 let foreignKey: Signer;
 let keys: JWTVerifyGetKey;
+let publicJwk: Record<string, unknown>;
 
 beforeAll(async () => {
   const google = await generateKeyPair('RS256');
@@ -17,6 +23,7 @@ beforeAll(async () => {
   foreignKey = (await generateKeyPair('RS256')).privateKey;
 
   const jwk = await exportJWK(google.publicKey);
+  publicJwk = { ...jwk, kid: 'google', alg: 'RS256' };
   keys = createLocalJWKSet({ keys: [{ ...jwk, kid: 'google', alg: 'RS256' }] });
 });
 
@@ -172,3 +179,92 @@ describe('ID token de Google (One Tap)', () => {
     });
   });
 });
+
+/** Un fetch falso que anota cuántas veces lo llamaron. */
+function fakeFetch(respond: (url: string) => Response) {
+  const calls: string[] = [];
+  const impl = (async (input: RequestInfo | URL) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    calls.push(url);
+    return respond(url);
+  }) as typeof fetch;
+  return { impl, calls };
+}
+
+let baseCounter = 0;
+/** Cada prueba usa otra dirección, para no compartir la caché de claves. */
+const freshBase = () => `https://google-falso-${++baseCounter}.test`;
+
+describe('descarga de las claves de Google', () => {
+  it('las descarga una vez y las reutiliza', async () => {
+    const { impl, calls } = fakeFetch(() => Response.json({ keys: [publicJwk] }, { headers: { 'cache-control': 'public, max-age=20000' } }));
+    const getKeys = googleKeys(freshBase(), impl);
+    const verifyWith = (credential: string) => verifyGoogleIdToken(credential, { clientId: CLIENT_ID, nonce: NONCE, keys: getKeys });
+
+    await expect(verifyWith(await sign())).resolves.toMatchObject({ email: 'ana@ejemplo.com' });
+    await expect(verifyWith(await sign())).resolves.toMatchObject({ email: 'ana@ejemplo.com' });
+    expect(calls).toHaveLength(1);
+  });
+
+  it('si Google no responde 200, el motivo dice qué respondió', async () => {
+    const { impl } = fakeFetch(() => new Response('<html>bloqueado</html>', { status: 403, headers: { 'content-type': 'text/html' } }));
+    expect(await rejection(await sign(), googleKeys(freshBase(), impl))).toMatchObject({
+      reason: 'claves-inaccesibles',
+      detail: 'HTTP 403 text/html',
+    });
+  });
+
+  it('si la red falla, también lo dice', async () => {
+    const impl = (async () => { throw Object.assign(new TypeError('fetch failed'), { cause: { code: 'ENOTFOUND' } }); }) as typeof fetch;
+    expect(await rejection(await sign(), googleKeys(freshBase(), impl))).toMatchObject({
+      reason: 'claves-inaccesibles',
+      detail: 'ENOTFOUND',
+    });
+  });
+});
+
+describe('plan B: verificación con tokeninfo', () => {
+  const claims = {
+    aud: CLIENT_ID,
+    iss: 'https://accounts.google.com',
+    exp: String(Math.floor(Date.now() / 1000) + 3600),
+    sub: '1234567890',
+    email: 'ana@ejemplo.com',
+    email_verified: 'true',
+    name: 'Ana Pérez',
+    nonce: NONCE,
+  };
+
+  const viaTokenInfo = (body: unknown, status = 200) => {
+    const { impl, calls } = fakeFetch(() => Response.json(body, { status }));
+    return {
+      calls,
+      result: verifyGoogleIdTokenWithTokenInfo('token', { clientId: CLIENT_ID, nonce: NONCE, baseUrl: 'https://g.test', fetchImpl: impl }),
+    };
+  };
+
+  it('acepta lo que Google confirma y le pasa el token', async () => {
+    const { result, calls } = viaTokenInfo(claims);
+    await expect(result).resolves.toEqual({ sub: '1234567890', email: 'ana@ejemplo.com', name: 'Ana Pérez', picture: undefined });
+    expect(calls[0]).toBe('https://g.test/tokeninfo?id_token=token');
+  });
+
+  it.each([
+    ['otra aplicación', { aud: 'otra' }, 'audiencia'],
+    ['otro emisor', { iss: 'https://evil.example.com' }, 'emisor'],
+    ['vencido', { exp: '1000' }, 'vencido'],
+    ['otro nonce', { nonce: 'otro' }, 'nonce-distinto'],
+    ['correo sin verificar', { email_verified: 'false' }, 'correo-sin-verificar'],
+  ])('rechaza %s', async (_label, change, reason) => {
+    await expect(viaTokenInfo({ ...claims, ...change }).result).rejects.toMatchObject({ reason });
+  });
+
+  it('si Google dice que el token no vale (400), lo rechaza', async () => {
+    await expect(viaTokenInfo({ error: 'invalid_token' }, 400).result).rejects.toMatchObject({ reason: 'firma' });
+  });
+
+  it('si tokeninfo tampoco responde, lo dice', async () => {
+    await expect(viaTokenInfo({}, 503).result).rejects.toMatchObject({ reason: 'claves-inaccesibles', detail: 'tokeninfo HTTP 503' });
+  });
+});
+
