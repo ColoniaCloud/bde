@@ -27,17 +27,24 @@ export default async function AccountPage({
 
   return (
     <AccountPanel
-      customer={customer ? { id: customer.id, email: customer.email, name: customer.name ?? null } : null}
+      customer={customer
+        ? { id: customer.id, email: customer.email, name: customer.name ?? null, picture: customer.picture ?? null }
+        : null}
       googleEnabled={googleConfigured()}
       error={error}
       orders={orders.map((order) => ({
         number: order.number,
         status: order.status,
+        paymentMethod: order.paymentMethod,
+        subtotal: order.subtotal,
+        surcharge: order.surcharge ?? 0,
         total: order.total,
         createdAt: order.createdAt,
         lines: (order.lines ?? []).map((line) => ({
+          code: line.code,
           title: line.title,
           quantity: line.quantity,
+          unitPrice: line.unitPrice,
           total: line.total,
         })),
       }))}

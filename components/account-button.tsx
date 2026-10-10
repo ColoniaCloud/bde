@@ -15,6 +15,8 @@ function accountLabel(name?: string | null, email?: string) {
 export function AccountButton() {
   const { customer, loading, googleEnabled } = useAuth();
   const [open, setOpen] = useState(false);
+  // Si la foto de Google no carga, queda el ícono en lugar de una imagen rota.
+  const [brokenPicture, setBrokenPicture] = useState(false);
   const wrapper = useRef<HTMLDivElement>(null);
 
   // El panel se cierra al tocar afuera o con Escape.
@@ -44,8 +46,18 @@ export function AccountButton() {
     return (
       <Link className="account-button" href="/cuenta" aria-label={`Cuenta de ${customer.email}`}>
         <span aria-hidden="true" className="icon">
-          {customer.picture
-            ? <img className="account-avatar" src={customer.picture} alt="" referrerPolicy="no-referrer" />
+          {customer.picture && !brokenPicture
+            ? (
+              // La foto viene de Google: no hace falta pasarla por la optimización de Next.
+              // oxlint-disable-next-line next/no-img-element
+              <img
+                className="account-avatar"
+                src={customer.picture}
+                alt=""
+                referrerPolicy="no-referrer"
+                onError={() => setBrokenPicture(true)}
+              />
+            )
             : <UserRound />}
         </span>
         <span>{accountLabel(customer.name, customer.email)}</span>

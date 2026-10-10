@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { Heart, Menu, MessageCircle, ShoppingBag, X } from 'lucide-react';
 import { AccountButton } from '@/components/account-button';
+import { useAuth } from '@/components/auth-provider';
 import { useNavCategories } from '@/components/nav-categories';
 import { SearchBox } from '@/components/search-box';
 import { useStore } from '@/components/store-provider';
@@ -11,6 +12,7 @@ import { useStore } from '@/components/store-provider';
 export function StoreHeader() {
   const [menuOpen, setMenuOpen] = useState(false);
   const { cartCount, openCart, showNotice } = useStore();
+  const { customer } = useAuth();
   const navItems = [
     ['promociones', '/#productos'],
     ...useNavCategories().map((category) => [category.name.toLowerCase(), `/categoria/${category.slug}`]),
@@ -24,7 +26,9 @@ export function StoreHeader() {
       <SearchBox />
       <div className="account-actions">
         <AccountButton />
-        <button aria-label="Mis favoritos" onClick={() => showNotice('Tus favoritos quedan guardados en este dispositivo.')}><Heart className="icon" /><span>favoritos</span></button>
+        {customer
+          ? <Link className="favorites-link" href="/cuenta#favoritos" aria-label="Mis favoritos"><Heart className="icon" /><span>favoritos</span></Link>
+          : <button aria-label="Mis favoritos" onClick={() => showNotice('Tus favoritos quedan en este dispositivo. Ingresá para verlos en todos.')}><Heart className="icon" /><span>favoritos</span></button>}
         <button aria-label="Consultar por WhatsApp" onClick={() => window.open('https://wa.me/59892143420', '_blank', 'noopener,noreferrer')}><MessageCircle className="icon" /><span>consultas</span></button>
         <button className="bag-button" aria-label={`Bolsa con ${cartCount} productos`} onClick={openCart}><ShoppingBag className="icon" /><b>{cartCount}</b><span>mi bolsa</span></button>
       </div>

@@ -1,8 +1,10 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { useAuth } from '@/components/auth-provider';
 import { CheckoutActions } from '@/components/checkout-actions';
 import { ProductImage } from '@/components/product-image';
+import { mergeFavorites, normalizeFavorites, sameFavorites } from '@/lib/favorites';
 
 /** Lo mínimo que necesita el carrito para agregar un producto. */
 export type CartProduct = {
@@ -20,6 +22,7 @@ type StoreContextValue = {
   favorites: number[];
   cartCount: number;
   addToCart: (product: CartProduct) => void;
+  addManyToCart: (items: { product: CartProduct; quantity: number }[]) => void;
   changeQuantity: (code: number, amount: number) => void;
   toggleFavorite: (code: number) => void;
   openCart: () => void;
@@ -87,6 +90,60 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return () => controller.abort();
   }, [codes, hydrated]);
 
+  // Con sesión, los favoritos se guardan también en la cuenta. Al ingresar se
+  // fusionan con los de este dispositivo (no se pierde nada de ninguno de los
+  // dos lados) y desde ahí cada cambio se guarda en la cuenta.
+  const { customer } = useAuth();
+  const customerId = customer?.id ?? null;
+  const syncedFor = useRef<number | null>(null);
+  const savedFavorites = useRef<number[]>([]);
+  const latestFavorites = useRef<number[]>([]);
+  useEffect(() => { latestFavorites.current = favorites; }, [favorites]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    if (customerId === null) {
+      syncedFor.current = null;
+      return;
+    }
+    if (syncedFor.current === customerId) return;
+
+    let cancelled = false;
+    fetch('/api/account/favorites', { cache: 'no-store' })
+      .then((response) => (response.ok ? response.json() : Promise.reject(new Error('sin favoritos'))))
+      .then((data: { favorites: unknown }) => {
+        if (cancelled) return;
+        const fromAccount = normalizeFavorites(data.favorites);
+        const merged = mergeFavorites(fromAccount, latestFavorites.current);
+        savedFavorites.current = fromAccount;
+        syncedFor.current = customerId;
+        setFavorites(merged);
+      })
+      .catch(() => {
+        // Si falla, quedan los del dispositivo; se reintenta en la próxima carga.
+      });
+
+    return () => { cancelled = true; };
+  }, [customerId, hydrated]);
+
+  useEffect(() => {
+    if (customerId === null || syncedFor.current !== customerId) return;
+    if (sameFavorites(favorites, savedFavorites.current)) return;
+
+    // Un respiro para juntar varios toques seguidos en un solo guardado.
+    const timer = window.setTimeout(() => {
+      fetch('/api/account/favorites', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ favorites }),
+      })
+        .then((response) => { if (response.ok) savedFavorites.current = favorites; })
+        .catch(() => {});
+    }, 600);
+
+    return () => window.clearTimeout(timer);
+  }, [favorites, customerId]);
+
   const showNotice = useCallback((message: string) => {
     setNotice(message);
     window.setTimeout(() => setNotice(''), 2400);
@@ -97,6 +154,21 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setDetails((current) => ({ ...current, [product.code]: product }));
     showNotice(`${product.brand} se agregó a tu bolsa`);
   }, [showNotice]);
+
+  /** Para «volver a comprar»: suma varios productos de una vez y abre la bolsa. */
+  const addManyToCart = useCallback((items: { product: CartProduct; quantity: number }[]) => {
+    if (items.length === 0) return;
+    setCart((current) => {
+      const next = { ...current };
+      for (const { product, quantity } of items) next[product.code] = (next[product.code] ?? 0) + quantity;
+      return next;
+    });
+    setDetails((current) => ({
+      ...current,
+      ...Object.fromEntries(items.map(({ product }) => [product.code, product])),
+    }));
+    setCartOpen(true);
+  }, []);
 
   const changeQuantity = useCallback((code: number, amount: number) => {
     setCart((current) => {
@@ -133,8 +205,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const whatsappUrl = `https://wa.me/59892143420?text=${encodeURIComponent(whatsappMessage)}`;
 
   const value = useMemo(
-    () => ({ cart, favorites, cartCount, addToCart, changeQuantity, toggleFavorite, openCart, showNotice }),
-    [cart, favorites, cartCount, addToCart, changeQuantity, toggleFavorite, openCart, showNotice],
+    () => ({ cart, favorites, cartCount, addToCart, addManyToCart, changeQuantity, toggleFavorite, openCart, showNotice }),
+    [cart, favorites, cartCount, addToCart, addManyToCart, changeQuantity, toggleFavorite, openCart, showNotice],
   );
 
   return (

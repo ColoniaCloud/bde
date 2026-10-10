@@ -50,3 +50,9 @@ test('el encabezado lleva a la cuenta', async ({ page }) => {
 
   await expect(page).toHaveURL(/\/cuenta/);
 });
+
+test('los favoritos de la cuenta piden sesión', async ({ request }) => {
+  expect((await request.get('/api/account/favorites')).status()).toBe(401);
+  const write = await request.put('/api/account/favorites', { data: { favorites: [1, 2] } });
+  expect(write.status()).toBe(401);
+});
