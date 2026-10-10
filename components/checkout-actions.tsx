@@ -1,6 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useAuth } from '@/components/auth-provider';
+import { GoogleSignInButton } from '@/components/google-identity';
 import { MERCADO_PAGO_SURCHARGE_PERCENT, mercadoPagoSurcharge } from '@/lib/pricing';
 
 type CheckoutActionsProps = {
@@ -21,6 +23,16 @@ export function CheckoutActions({ cart, subtotal, whatsappUrl }: CheckoutActions
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState<'mercado-pago' | 'whatsapp' | null>(null);
   const [error, setError] = useState('');
+  const { customer, googleEnabled } = useAuth();
+
+  // Con sesión, los datos salen de la cuenta. Sólo se completa lo que esté
+  // vacío: si la persona ya escribió otra cosa, se respeta.
+  useEffect(() => {
+    if (!customer) return;
+    if (customer.name) setName((current) => current || customer.name || '');
+    setEmail((current) => current || customer.email);
+  }, [customer]);
+
   const surcharge = mercadoPagoSurcharge(subtotal);
   const paymentTotal = subtotal + surcharge;
   const items = Object.entries(cart).map(([id, quantity]) => ({ id: Number(id), quantity }));
@@ -105,6 +117,14 @@ export function CheckoutActions({ cart, subtotal, whatsappUrl }: CheckoutActions
         <span>Recargo Mercado Pago ({MERCADO_PAGO_SURCHARGE_PERCENT}%) <b>{currency.format(surcharge)}</b></span>
         <strong>Total con Mercado Pago <b>{currency.format(paymentTotal)}</b></strong>
       </div>
+      {customer
+        ? <p className="checkout-account">El pedido queda guardado en tu cuenta <b>{customer.email}</b>.</p>
+        : googleEnabled && (
+          <div className="checkout-signin">
+            <p>Ingresá para guardar el pedido en tu cuenta y seguir su estado. Es opcional.</p>
+            <GoogleSignInButton width={260} />
+          </div>
+        )}
       <label htmlFor="checkout-name">Nombre y apellido</label>
       <input
         id="checkout-name"

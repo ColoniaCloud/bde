@@ -20,21 +20,24 @@ import type { NextConfig } from 'next';
 const csp = [
   "default-src 'self'",
   // Clarity entra a través de GTM: el contenedor carga www.clarity.ms/tag/...
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://*.clarity.ms",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  // accounts.google.com/gsi: «Continuar como…» y el botón de Google. Son las
+  // cuatro rutas que pide la documentación de Google Identity Services.
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://*.clarity.ms https://accounts.google.com/gsi/client",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com/gsi/style",
   "font-src 'self' data: https://fonts.gstatic.com",
   // El catálogo todavía enlaza imágenes al CDN de Natura. El resto son los
   // píxeles de medición: Clarity manda sus datos como una imagen (c.gif) y ese
   // pedido **redirige** a c.bing.com para sincronizar el identificador, así que
   // hacen falta los dos. Analytics cae al mismo método cuando no puede usar la
-  // conexión directa.
-  "img-src 'self' data: blob: https://production.na01.natura.com https://www.googletagmanager.com https://*.google-analytics.com https://*.clarity.ms https://c.bing.com",
+  // conexión directa. googleusercontent.com sirve las fotos de perfil de Google.
+  "img-src 'self' data: blob: https://production.na01.natura.com https://www.googletagmanager.com https://*.google-analytics.com https://*.clarity.ms https://c.bing.com https://*.googleusercontent.com",
   // Adónde reportan las mediciones. Analytics usa además un servidor por región
   // (region1.google-analytics.com y similares) y Clarity manda una parte a
   // c.bing.com, de ahí que no alcance con el dominio principal de cada uno.
-  // Ya no hay Supabase: el ingreso con Google lo resuelve el servidor.
-  "connect-src 'self' https://www.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com https://*.clarity.ms https://c.bing.com",
-  "frame-src 'self' https://www.googletagmanager.com",
+  // El ingreso con Google se verifica en el servidor; el navegador sólo habla
+  // con accounts.google.com/gsi para mostrar el aviso y el botón.
+  "connect-src 'self' https://www.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com https://*.clarity.ms https://c.bing.com https://accounts.google.com/gsi/",
+  "frame-src 'self' https://www.googletagmanager.com https://accounts.google.com/gsi/",
   "media-src 'self'",
   "worker-src 'self' blob:",
   // Nadie debería poder meter la tienda dentro de un iframe.

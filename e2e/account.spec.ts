@@ -33,6 +33,20 @@ test('/api/auth/me no inventa una sesión', async ({ request }) => {
 
 test('el encabezado lleva a la cuenta', async ({ page }) => {
   await page.goto('/');
-  await page.locator('.account-button').click();
+  const account = page.locator('.account-button');
+  // Mientras se consulta la sesión muestra «cuenta»; después, «ingresar».
+  await expect(account).toHaveText(/ingresar/);
+
+  // Con Google configurado, «ingresar» es un botón que abre un panel con el
+  // botón de Google y un enlace a la cuenta; sin Google, es un enlace directo.
+  const opensPanel = await account.evaluate((element) => element.tagName === 'BUTTON');
+  await account.click();
+
+  if (opensPanel) {
+    const popover = page.getByRole('dialog', { name: 'Ingresar a tu cuenta' });
+    await expect(popover.locator('.google-signin')).toBeVisible();
+    await popover.getByRole('link', { name: 'Ver mi cuenta' }).click();
+  }
+
   await expect(page).toHaveURL(/\/cuenta/);
 });

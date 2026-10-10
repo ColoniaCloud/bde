@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/components/auth-provider';
+import { GoogleSignInButton } from '@/components/google-identity';
 import { StoreFooter } from '@/components/store-footer';
 import { StoreHeader } from '@/components/store-header';
 import { currency } from '@/lib/format';
@@ -68,12 +69,7 @@ export function AccountPanel({ customer, googleEnabled, error, orders }: Props) 
             <div className="legal-content">
               <p>Con una cuenta ves el estado de tus pedidos y tus favoritos te siguen entre dispositivos.</p>
               {googleEnabled
-                ? <p>
-                    {/* Tiene que ser un <a>: es una redirección del servidor hacia
-                        Google, no una navegación interna que Link pueda manejar. */}
-                    {/* oxlint-disable-next-line next/no-html-link-for-pages */}
-                    <a className="primary-action" href="/api/auth/google">continuar con Google</a>
-                  </p>
+                ? <GoogleSignInButton />
                 : <p>El ingreso con Google todavía no está habilitado. Escribinos por WhatsApp y te ayudamos con tu pedido.</p>}
             </div>
           </> : <>

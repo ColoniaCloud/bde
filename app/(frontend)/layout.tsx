@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Script from 'next/script';
 import { connection } from 'next/server';
 import { AuthProvider } from '@/components/auth-provider';
+import { GoogleIdentityProvider } from '@/components/google-identity';
 import { NavCategoriesProvider } from '@/components/nav-categories';
 import { StoreProvider } from '@/components/store-provider';
 import { getCategories, type StoreCategory } from '@/lib/products';
@@ -130,7 +131,9 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
         />
         <AuthProvider>
           <NavCategoriesProvider categories={navCategories}>
-            <StoreProvider>{children}</StoreProvider>
+            <GoogleIdentityProvider>
+              <StoreProvider>{children}</StoreProvider>
+            </GoogleIdentityProvider>
           </NavCategoriesProvider>
         </AuthProvider>
       </body>
