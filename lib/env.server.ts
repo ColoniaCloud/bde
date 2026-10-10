@@ -14,11 +14,12 @@ import { z } from 'zod';
 
 /**
  * En un archivo .env, `SMTP_HOST=` es la forma habitual de dejar algo sin
- * configurar. Sin esto, la cadena vacía cuenta como "presente" y hace fallar el
- * arranque por una variable que el operador quiso justamente dejar vacía.
+ * configurar, y en un panel de hosting a veces queda un espacio suelto. Sin
+ * esto, ese valor cuenta como "presente" y hace fallar el arranque por una
+ * variable que el operador quiso justamente dejar vacía.
  */
 const blankAsAbsent = <T extends z.ZodType>(inner: T) =>
-  z.preprocess((value) => (value === '' ? undefined : value), inner);
+  z.preprocess((value) => (typeof value === 'string' && value.trim() === '' ? undefined : value), inner);
 
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -44,8 +45,10 @@ const schema = z.object({
 
   // Ingreso con Google. Es aditivo: sin credenciales, la tienda no ofrece el
   // botón y el ingreso con correo y contraseña sigue funcionando.
-  GOOGLE_CLIENT_ID: blankAsAbsent(z.string().min(1).optional()),
-  GOOGLE_CLIENT_SECRET: blankAsAbsent(z.string().min(1).optional()),
+  // Recortados: un espacio o salto de línea al pegar el valor en el panel del
+  // hosting hace que Google rechace el ID, o que el token no coincida con él.
+  GOOGLE_CLIENT_ID: blankAsAbsent(z.string().trim().min(1).optional()),
+  GOOGLE_CLIENT_SECRET: blankAsAbsent(z.string().trim().min(1).optional()),
   // Sólo para apuntar a un simulador en pruebas.
   GOOGLE_BASE_URL: blankAsAbsent(z.url().optional()),
 

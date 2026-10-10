@@ -5,7 +5,8 @@ import { serverEnv } from '@/lib/env.server';
 import { GoogleIdTokenError, googleKeys, verifyGoogleIdToken } from '@/lib/google-id-token';
 import { googleConfigured } from '@/lib/google-oauth';
 import { logError, logWarning } from '@/lib/logger';
-import { createState, verifyState } from '@/lib/oauth-state';
+import { verifyState } from '@/lib/oauth-state';
+import { NONCE_COOKIE, NONCE_COOKIE_PATH, NONCE_MAX_AGE_MS } from '@/lib/one-tap-nonce';
 import { hitRateLimit, requestKey } from '@/lib/rate-limit';
 import { setSessionCookie } from '@/lib/session-cookie';
 
@@ -15,40 +16,12 @@ export const dynamic = 'force-dynamic';
 /**
  * Ingreso con «Continuar como…» (Google One Tap).
  *
- * GET entrega al navegador el ID de cliente y un nonce firmado, que también
- * queda en una cookie. Google copia ese nonce dentro del token que firma, y el
- * POST exige que coincidan: un token capturado en otro navegador, o que un
+ * /api/auth/google/one-tap/nonce entrega al navegador el ID de cliente y un
+ * nonce firmado, que también queda en una cookie. Google copia ese nonce dentro
+ * del token que firma, y este POST exige que coincidan: un token capturado en otro navegador, o que un
  * sitio ajeno intente enviarnos para iniciar sesión con *su* cuenta (CSRF de
  * login), no trae el nonce de la cookie de este navegador.
  */
-
-const NONCE_COOKIE = 'google_nonce';
-// One Tap puede quedar abierto mientras la persona mira la tienda: más margen
-// que los diez minutos del flujo por redirección.
-const NONCE_MAX_AGE_MS = 2 * 60 * 60 * 1000;
-
-export async function GET() {
-  if (!googleConfigured()) {
-    return NextResponse.json({ enabled: false });
-  }
-
-  const env = serverEnv();
-  const nonce = createState(env.PAYLOAD_SECRET);
-  const response = NextResponse.json(
-    { enabled: true, clientId: env.GOOGLE_CLIENT_ID, nonce },
-    { headers: { 'Cache-Control': 'no-store' } },
-  );
-
-  response.cookies.set(NONCE_COOKIE, nonce, {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: env.NODE_ENV === 'production',
-    path: '/api/auth/google',
-    maxAge: NONCE_MAX_AGE_MS / 1000,
-  });
-
-  return response;
-}
 
 export async function POST(request: Request) {
   if (!googleConfigured()) {
@@ -97,12 +70,24 @@ export async function POST(request: Request) {
     });
     setSessionCookie(response, token);
     // El nonce es de un solo uso.
-    response.cookies.set(NONCE_COOKIE, '', { path: '/api/auth/google', maxAge: 0 });
+    response.cookies.set(NONCE_COOKIE, '', { path: NONCE_COOKIE_PATH, maxAge: 0 });
 
     return response;
   } catch (error) {
     if (error instanceof GoogleIdTokenError) {
-      logWarning('One Tap con token rechazado', { reason: error.message });
+      // El motivo va en el mensaje: el visor de logs de Hostinger muestra sólo eso.
+      // Si el nonce no coincide, saber si igual lo firmó la tienda distingue una
+      // respuesta cacheada (nonce nuestro pero de otro momento) de un token ajeno.
+      const detail = error.reason === 'nonce-distinto'
+        ? (verifyState(env.PAYLOAD_SECRET, error.tokenNonce ?? null, Date.now(), 24 * 60 * 60 * 1000)
+          ? 'firmado por la tienda'
+          : 'no firmado por la tienda')
+        : error.detail;
+      // El motivo va en el mensaje: el visor de logs de Hostinger muestra sólo eso.
+      logWarning(`One Tap con token rechazado: ${error.reason}${detail ? ` (${detail})` : ''}`, {
+        reason: error.reason,
+        detail,
+      });
       return NextResponse.json({ message: 'No pudimos verificar tu cuenta de Google.' }, { status: 401 });
     }
 

@@ -49,6 +49,17 @@ function sign(
 
 const verify = (credential: string) => verifyGoogleIdToken(credential, { clientId: CLIENT_ID, nonce: NONCE, keys });
 
+/** El motivo del rechazo, que es lo que se registra en el log. */
+async function rejection(credential: string, verifyKeys: JWTVerifyGetKey = keys) {
+  try {
+    await verifyGoogleIdToken(credential, { clientId: CLIENT_ID, nonce: NONCE, keys: verifyKeys });
+  } catch (error) {
+    if (error instanceof GoogleIdTokenError) return { reason: error.reason, detail: error.detail, tokenNonce: error.tokenNonce };
+    throw error;
+  }
+  throw new Error('se esperaba un rechazo');
+}
+
 describe('ID token de Google (One Tap)', () => {
   it('acepta uno válido y devuelve el perfil', async () => {
     await expect(verify(await sign())).resolves.toEqual({
@@ -115,6 +126,49 @@ describe('ID token de Google (One Tap)', () => {
 
     it('algo que no es un token', async () => {
       await expect(verify('no-es-un-jwt')).rejects.toBeInstanceOf(GoogleIdTokenError);
+    });
+  });
+
+  describe('dice por qué lo rechaza', () => {
+    it('firma', async () => {
+      expect((await rejection(await sign({}, { key: foreignKey }))).reason).toBe('firma');
+    });
+
+    it('audiencia, con el campo en el detalle', async () => {
+      expect(await rejection(await sign({}, { audience: 'otra' }))).toMatchObject({ reason: 'audiencia', detail: expect.stringContaining('aud') });
+    });
+
+    it('emisor', async () => {
+      expect((await rejection(await sign({}, { issuer: 'https://evil.example.com' }))).reason).toBe('emisor');
+    });
+
+    it('vencido', async () => {
+      expect((await rejection(await sign({}, { expiresIn: '-10m' }))).reason).toBe('vencido');
+    });
+
+    it('nonce distinto, con el nonce del token para diagnosticarlo', async () => {
+      expect(await rejection(await sign({ nonce: 'otro' }))).toMatchObject({ reason: 'nonce-distinto', tokenNonce: 'otro' });
+    });
+
+    it('sin nonce', async () => {
+      expect((await rejection(await sign({ nonce: undefined }))).reason).toBe('sin-nonce');
+    });
+
+    it('correo sin verificar', async () => {
+      expect((await rejection(await sign({ email_verified: false }))).reason).toBe('correo-sin-verificar');
+    });
+
+    it('forma, nombrando el campo', async () => {
+      expect(await rejection(await sign({ email: 'no-es-un-correo' }))).toMatchObject({ reason: 'forma', detail: 'email' });
+    });
+
+    it('mal formado', async () => {
+      expect((await rejection('no-es-un-jwt')).reason).toBe('mal-formado');
+    });
+
+    it('claves de Google inaccesibles (red caída)', async () => {
+      const unreachable: JWTVerifyGetKey = async () => { throw new TypeError('fetch failed'); };
+      expect(await rejection(await sign(), unreachable)).toMatchObject({ reason: 'claves-inaccesibles', detail: 'TypeError' });
     });
   });
 });

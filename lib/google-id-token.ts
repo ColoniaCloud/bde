@@ -1,4 +1,4 @@
-import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from 'jose';
+import { createRemoteJWKSet, errors, jwtVerify, type JWTVerifyGetKey } from 'jose';
 import { z } from 'zod';
 
 /**
@@ -21,7 +21,53 @@ import { z } from 'zod';
 const GOOGLE_CERTS_URL = 'https://www.googleapis.com/oauth2/v3/certs';
 const GOOGLE_ISSUERS = ['accounts.google.com', 'https://accounts.google.com'];
 
-export class GoogleIdTokenError extends Error {}
+/**
+ * Por qué se rechazó el token. Va al log tal cual: sin esto, «no es válido» no
+ * alcanza para saber si falló la firma, el ID de cliente, el reloj o el nonce.
+ */
+export type GoogleIdTokenRejection =
+  | 'firma'
+  | 'audiencia'
+  | 'emisor'
+  | 'vencido'
+  | 'todavia-no-vigente'
+  | 'claves-sin-coincidencia'
+  | 'claves-sin-respuesta'
+  | 'claves-inaccesibles'
+  | 'mal-formado'
+  | 'forma'
+  | 'sin-nonce'
+  | 'nonce-distinto'
+  | 'correo-sin-verificar';
+
+export class GoogleIdTokenError extends Error {
+  /** `detail` es técnico y sin datos personales: un código de error o el nombre de un campo. */
+  constructor(
+    message: string,
+    public reason: GoogleIdTokenRejection,
+    public detail?: string,
+    /** El nonce que traía el token, para diagnosticar un nonce distinto. No se registra tal cual. */
+    public tokenNonce?: string,
+  ) {
+    super(message);
+  }
+}
+
+function rejectionOf(error: unknown): GoogleIdTokenRejection {
+  if (error instanceof errors.JWTExpired) return 'vencido';
+  if (error instanceof errors.JWTClaimValidationFailed) {
+    if (error.claim === 'aud') return 'audiencia';
+    if (error.claim === 'iss') return 'emisor';
+    if (error.claim === 'nbf' || error.claim === 'iat') return 'todavia-no-vigente';
+    return 'forma';
+  }
+  if (error instanceof errors.JWSSignatureVerificationFailed) return 'firma';
+  if (error instanceof errors.JWKSNoMatchingKey) return 'claves-sin-coincidencia';
+  if (error instanceof errors.JWKSTimeout) return 'claves-sin-respuesta';
+  if (error instanceof errors.JWSInvalid || error instanceof errors.JWTInvalid) return 'mal-formado';
+  // Cualquier otra cosa es no haber podido traer las claves de Google (red, DNS).
+  return 'claves-inaccesibles';
+}
 
 const claimsSchema = z.object({
   sub: z.string().min(1),
@@ -62,21 +108,33 @@ export async function verifyGoogleIdToken(
       // Margen para relojes un poco desfasados entre Google y el servidor.
       clockTolerance: 60,
     }));
-  } catch {
-    throw new GoogleIdTokenError('El token de Google no es válido.');
+  } catch (error) {
+    const detail = error instanceof errors.JOSEError
+      ? [error.code, error instanceof errors.JWTClaimValidationFailed ? error.claim : ''].filter(Boolean).join(' ')
+      : error instanceof Error ? error.name : undefined;
+    throw new GoogleIdTokenError('El token de Google no es válido.', rejectionOf(error), detail);
   }
 
   const parsed = claimsSchema.safeParse(payload);
-  if (!parsed.success) throw new GoogleIdTokenError('El token de Google no tiene la forma esperada.');
+  if (!parsed.success) {
+    const fields = parsed.error.issues.map((issue) => issue.path.join('.')).join(',');
+    throw new GoogleIdTokenError('El token de Google no tiene la forma esperada.', 'forma', fields);
+  }
 
   const claims = parsed.data;
-  if (!claims.nonce || claims.nonce !== options.nonce) {
-    throw new GoogleIdTokenError('El token de Google no corresponde a este navegador.');
+  if (!claims.nonce) throw new GoogleIdTokenError('El token de Google no corresponde a este navegador.', 'sin-nonce');
+  if (claims.nonce !== options.nonce) {
+    throw new GoogleIdTokenError(
+      'El token de Google no corresponde a este navegador.',
+      'nonce-distinto',
+      undefined,
+      claims.nonce,
+    );
   }
 
   // Un correo sin verificar permitiría reclamar la cuenta de otra persona.
   if (claims.email_verified !== true && claims.email_verified !== 'true') {
-    throw new GoogleIdTokenError('La cuenta de Google no tiene el correo verificado.');
+    throw new GoogleIdTokenError('La cuenta de Google no tiene el correo verificado.', 'correo-sin-verificar');
   }
 
   return { sub: claims.sub, email: claims.email, name: claims.name, picture: claims.picture };

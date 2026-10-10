@@ -47,6 +47,18 @@ describe('serverEnv', () => {
     expect(serverEnv().SMTP_PORT).toBe(587);
   });
 
+  it('recorta el ID de cliente de Google: un espacio pegado sin querer no lo rompe', async () => {
+    const serverEnv = await loadEnv({ ...clean, GOOGLE_CLIENT_ID: ' 123-abc.apps.googleusercontent.com\n' });
+    expect(serverEnv().GOOGLE_CLIENT_ID).toBe('123-abc.apps.googleusercontent.com');
+  });
+
+  it('una variable con sólo espacios cuenta como ausente', async () => {
+    const serverEnv = await loadEnv({ ...clean, GOOGLE_CLIENT_ID: '   ', SMTP_HOST: ' ' });
+    expect(() => serverEnv()).not.toThrow();
+    expect(serverEnv().GOOGLE_CLIENT_ID).toBeUndefined();
+    expect(serverEnv().SMTP_HOST).toBeUndefined();
+  });
+
   it('usa 587 como puerto SMTP por defecto', async () => {
     const serverEnv = await loadEnv(clean);
     expect(serverEnv().SMTP_PORT).toBe(587);

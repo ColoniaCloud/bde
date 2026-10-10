@@ -125,7 +125,7 @@ export function GoogleIdentityProvider({ children }: { children: React.ReactNode
 
     void (async () => {
       try {
-        const config = await fetch('/api/auth/google/one-tap', { cache: 'no-store' })
+        const config = await fetch('/api/auth/google/one-tap/nonce', { method: 'POST', cache: 'no-store' })
           .then((response) => response.json() as Promise<{ enabled: boolean; clientId?: string; nonce?: string }>);
         if (!config.enabled || !config.clientId || !config.nonce) throw new Error('deshabilitado');
 
