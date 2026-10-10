@@ -10,6 +10,7 @@ import * as migration_20261008_224216_category_parent from './20261008_224216_ca
 import * as migration_20261008_224349_category_icon_select from './20261008_224349_category_icon_select';
 import * as migration_20261009_230441_payload_3_90_reset_password from './20261009_230441_payload_3_90_reset_password';
 import * as migration_20261010_010803_customer_picture from './20261010_010803_customer_picture';
+import * as migration_20261010_023802_delivery_details from './20261010_023802_delivery_details';
 
 export const migrations = [
   {
@@ -70,6 +71,11 @@ export const migrations = [
   {
     up: migration_20261010_010803_customer_picture.up,
     down: migration_20261010_010803_customer_picture.down,
-    name: '20261010_010803_customer_picture'
+    name: '20261010_010803_customer_picture',
+  },
+  {
+    up: migration_20261010_023802_delivery_details.up,
+    down: migration_20261010_023802_delivery_details.down,
+    name: '20261010_023802_delivery_details'
   },
 ];

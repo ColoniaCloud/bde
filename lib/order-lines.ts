@@ -1,4 +1,5 @@
 import type { CheckoutItemInput, ProductLookup } from '@/lib/mercado-pago';
+import { type Delivery, DeliveryError, normalizeDelivery } from '@/lib/delivery';
 
 /**
  * Validación y armado de las líneas de un pedido.
@@ -65,6 +66,16 @@ export function normalizeCustomer(name: string, email: string) {
   }
 
   return { customerName, customerEmail };
+}
+
+/** Datos de entrega del pedido; un teléfono mal escrito se le explica al cliente como cualquier error del pedido. */
+export function normalizeOrderDelivery(input: unknown): Delivery {
+  try {
+    return normalizeDelivery(input);
+  } catch (error) {
+    if (error instanceof DeliveryError) throw new OrderError(error.message, 400);
+    throw error;
+  }
 }
 
 export type OrderStatus = 'pending' | 'paid' | 'cancelled' | 'delivered';

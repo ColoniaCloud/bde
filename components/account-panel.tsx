@@ -3,13 +3,14 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Heart, LogOut, Package, RotateCcw } from 'lucide-react';
+import { Heart, LogOut, MapPin, Package, RotateCcw } from 'lucide-react';
 import { useAuth } from '@/components/auth-provider';
 import { GoogleSignInButton } from '@/components/google-identity';
 import { ProductImage } from '@/components/product-image';
 import { StoreFooter } from '@/components/store-footer';
 import { StoreHeader } from '@/components/store-header';
 import { type CartProduct, useStore } from '@/components/store-provider';
+import { type Delivery, describeDelivery } from '@/lib/delivery';
 import { currency } from '@/lib/format';
 
 type OrderLine = { code: number; title: string; quantity: number; unitPrice: number; total: number };
@@ -21,11 +22,12 @@ type Order = {
   surcharge: number;
   total: number;
   createdAt: string;
+  delivery: Delivery;
   lines: OrderLine[];
 };
 
 type Props = {
-  customer: { id: number; email: string; name: string | null; picture: string | null } | null;
+  customer: { id: number; email: string; name: string | null; picture: string | null; delivery: Delivery } | null;
   googleEnabled: boolean;
   error?: string;
   orders: Order[];
@@ -135,7 +137,10 @@ function SignedIn({ customer, orders }: { customer: NonNullable<Props['customer'
 
     <div className="account-grid">
       <OrdersCard orders={orders} />
-      <FavoritesCard />
+      <div className="account-side">
+        <DetailsCard name={customer.name} delivery={customer.delivery} />
+        <FavoritesCard />
+      </div>
     </div>
   </>;
 }
@@ -223,6 +228,10 @@ function OrderItem({ order, open }: { order: Order; open: boolean }) {
             {order.surcharge > 0 && <div><dt>Recargo Mercado Pago</dt><dd>{currency.format(order.surcharge)}</dd></div>}
             <div className="account-order-total"><dt>Total</dt><dd>{currency.format(order.total)}</dd></div>
             <div><dt>Forma de pago</dt><dd>{paymentLabel[order.paymentMethod] ?? order.paymentMethod}</dd></div>
+            {describeDelivery(order.delivery).map((line) => {
+              const [label, ...rest] = line.split(': ');
+              return <div key={label}><dt>{label}</dt><dd>{rest.join(': ')}</dd></div>;
+            })}
           </dl>
           <button className="account-buy-again" onClick={() => void buyAgain()} disabled={busy}>
             <RotateCcw aria-hidden="true" /> {busy ? 'agregando…' : 'volver a comprar'}
@@ -230,6 +239,78 @@ function OrderItem({ order, open }: { order: Order; open: boolean }) {
         </div>
       </details>
     </li>
+  );
+}
+
+function DetailsCard({ name, delivery }: { name: string | null; delivery: Delivery }) {
+  const router = useRouter();
+  const { refresh } = useAuth();
+  const [form, setForm] = useState({
+    name: name ?? '',
+    phone: delivery.phone ?? '',
+    address: delivery.address ?? '',
+    city: delivery.city ?? '',
+    notes: delivery.notes ?? '',
+  });
+  const [status, setStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [error, setError] = useState('');
+
+  const update = (field: keyof typeof form) => (event: React.ChangeEvent<HTMLInputElement>) => {
+    setForm((current) => ({ ...current, [field]: event.target.value }));
+    setStatus('idle');
+  };
+
+  async function save(event: React.SyntheticEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setStatus('saving');
+    setError('');
+    try {
+      const response = await fetch('/api/account/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: form.name,
+          delivery: { phone: form.phone, address: form.address, city: form.city, notes: form.notes },
+        }),
+      });
+      const data = await response.json().catch(() => null) as { message?: string } | null;
+      if (!response.ok) throw new Error(data?.message || 'No pudimos guardar tus datos.');
+      setStatus('saved');
+      // El checkout y el saludo toman los datos nuevos.
+      await refresh();
+      router.refresh();
+    } catch (saveError) {
+      setStatus('idle');
+      setError(saveError instanceof Error ? saveError.message : 'No pudimos guardar tus datos.');
+    }
+  }
+
+  return (
+    <section className="account-card" id="datos" aria-labelledby="datos-title">
+      <h2 id="datos-title"><MapPin aria-hidden="true" /> Mis datos</h2>
+      <p className="account-empty">Con esto el checkout se completa solo. Todo es opcional salvo el nombre.</p>
+      <form className="account-details" onSubmit={(event) => void save(event)}>
+        <label>Nombre y apellido
+          <input value={form.name} onChange={update('name')} autoComplete="name" required minLength={2} maxLength={100} />
+        </label>
+        <label>Teléfono
+          <input value={form.phone} onChange={update('phone')} type="tel" inputMode="tel" autoComplete="tel" placeholder="099 123 456" maxLength={30} />
+        </label>
+        <label>Dirección
+          <input value={form.address} onChange={update('address')} autoComplete="street-address" placeholder="Calle y número" maxLength={160} />
+        </label>
+        <label>Ciudad o localidad
+          <input value={form.city} onChange={update('city')} autoComplete="address-level2" placeholder="Maldonado, Punta del Este…" maxLength={80} />
+        </label>
+        <label>Referencias
+          <input value={form.notes} onChange={update('notes')} placeholder="Apto, entre calles, horario…" maxLength={300} />
+        </label>
+        {error && <p className="checkout-error" role="alert">{error}</p>}
+        <button className="account-save" type="submit" disabled={status === 'saving'}>
+          {status === 'saving' ? 'guardando…' : status === 'saved' ? '✓ guardado' : 'guardar mis datos'}
+        </button>
+      </form>
+    </section>
   );
 }
 

@@ -556,3 +556,19 @@ footer > div { display: flex; flex-direction: column; align-items: flex-start; g
   .account-orders summary::after { display: none; }
   .account-order-date { grid-row: 2; }
 }
+
+/* Datos de entrega: checkout y cuenta. */
+.checkout-delivery { display: grid; gap: 8px; margin: 4px 0 0; padding: 12px 0 0; border: 0; border-top: 1px solid var(--line); min-width: 0; }
+.checkout-delivery legend { padding: 0; color: var(--ink); font-size: 11px; font-weight: 700; }
+.checkout-delivery legend span { color: var(--muted); font-weight: 400; }
+.checkout-delivery > label { color: var(--ink); font-size: 10px; font-weight: 700; }
+.checkout-delivery > input { width: 100%; border: 1px solid var(--line); border-radius: 3px; padding: 12px 13px; background: #fff; color: var(--ink); font: 12px var(--sans); outline: none; }
+.checkout-delivery > input:focus { border-color: #3483fa; box-shadow: 0 0 0 3px #3483fa20; }
+.checkout-delivery .checkout-remember { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 10px; font-weight: 400; }
+.account-side { display: grid; gap: 20px; align-content: start; }
+.account-details { display: grid; gap: 12px; margin-top: 14px; }
+.account-details label { display: grid; gap: 5px; color: var(--ink); font-size: 11px; font-weight: 700; }
+.account-details input { width: 100%; border: 1px solid var(--line); border-radius: 6px; padding: 11px 12px; background: #fff; color: var(--ink); font: 13px var(--sans); outline: none; }
+.account-details input:focus { border-color: var(--ink); box-shadow: 0 0 0 3px #24231d15; }
+.account-save { justify-self: start; padding: 11px 18px; border: 0; border-radius: 999px; background: var(--ink); color: #fff; font: 700 11px var(--sans); text-transform: uppercase; cursor: pointer; }
+.account-save:disabled { opacity: .6; cursor: wait; }

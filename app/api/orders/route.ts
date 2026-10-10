@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import configPromise from '@payload-config';
 import { getPayload } from 'payload';
 import { logError } from '@/lib/logger';
-import { normalizeCustomer, OrderError } from '@/lib/order-lines';
+import { normalizeCustomer, normalizeOrderDelivery, OrderError } from '@/lib/order-lines';
 import { createOrder } from '@/lib/orders';
 import { databaseProductLookup } from '@/lib/product-lookup';
 import { hitRateLimit, requestKey } from '@/lib/rate-limit';
@@ -25,6 +25,7 @@ export async function POST(request: Request) {
       customerName?: string;
       customerEmail?: string;
       items?: CheckoutItemInput[];
+      delivery?: unknown;
     };
     const { customerName, customerEmail } = normalizeCustomer(
       body.customerName ?? '',
@@ -38,6 +39,7 @@ export async function POST(request: Request) {
       paymentMethod: 'whatsapp',
       lookup: databaseProductLookup,
       customerId: await signedInCustomerId(),
+      delivery: normalizeOrderDelivery(body.delivery),
     });
 
     return NextResponse.json({ orderNumber: order.number });

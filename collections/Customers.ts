@@ -83,6 +83,18 @@ export const Customers: CollectionConfig = {
       },
     },
     {
+      // Para completar el checkout solo. El cliente los edita desde su cuenta.
+      name: 'delivery',
+      type: 'group',
+      label: 'Datos de entrega',
+      fields: [
+        { name: 'phone', type: 'text', label: 'Teléfono', maxLength: 30 },
+        { name: 'address', type: 'text', label: 'Dirección', maxLength: 160 },
+        { name: 'city', type: 'text', label: 'Ciudad o localidad', maxLength: 80 },
+        { name: 'notes', type: 'textarea', label: 'Referencias', maxLength: 300 },
+      ],
+    },
+    {
       name: 'favorites',
       type: 'json',
       label: 'Favoritos',

@@ -1,5 +1,6 @@
 import 'server-only';
 import nodemailer from 'nodemailer';
+import { type Delivery, describeDelivery } from '@/lib/delivery';
 import { serverEnv } from '@/lib/env.server';
 import { OrderError } from '@/lib/order-lines';
 
@@ -21,6 +22,7 @@ export type EmailableOrder = {
   subtotal: number;
   surcharge: number;
   total: number;
+  delivery?: Delivery;
 };
 
 const currency = new Intl.NumberFormat('es-UY', {
@@ -102,8 +104,11 @@ export async function sendPurchaseOrderEmail(order: EmailableOrder, smtp: SmtpCo
   const transporter = createTransport(smtp);
   const paymentLabel = order.paymentMethod === 'mercado-pago' ? 'Mercado Pago (pendiente de acreditación)' : 'A coordinar por WhatsApp';
   const subject = `Orden/boleta de compra N.º ${order.number} · Boutique del Este`;
-  const text = `Hola ${order.customerName},\n\nRecibimos tu orden/boleta de compra N.º ${order.number}.\n\n${orderLinesText(order)}\nForma de pago: ${paymentLabel}\nFecha: ${orderDate.format(order.createdAt)}\n\nConfirmaremos disponibilidad y entrega.\n\nEste comprobante registra tu pedido y no sustituye una factura electrónica fiscal.`;
-  const html = emailLayout('ORDEN/BOLETA DE COMPRA', `<h1 style="margin:0 0 8px;font-size:26px">N.º ${order.number}</h1><p>Hola ${escapeHtml(order.customerName)}, recibimos tu pedido.</p>${orderRowsHtml(order)}<p style="font-size:13px;line-height:1.6"><strong>Forma de pago:</strong> ${paymentLabel}<br><strong>Fecha:</strong> ${orderDate.format(order.createdAt)}</p><p style="font-size:13px;line-height:1.6">Confirmaremos disponibilidad y coordinaremos la entrega.</p>`);
+  const deliveryLines = describeDelivery(order.delivery ?? {});
+  const deliveryText = deliveryLines.map((line) => `\n${line}`).join('');
+  const deliveryHtml = deliveryLines.map((line) => `<br>${escapeHtml(line)}`).join('');
+  const text = `Hola ${order.customerName},\n\nRecibimos tu orden/boleta de compra N.º ${order.number}.\n\n${orderLinesText(order)}\nForma de pago: ${paymentLabel}\nFecha: ${orderDate.format(order.createdAt)}${deliveryText}\n\nConfirmaremos disponibilidad y entrega.\n\nEste comprobante registra tu pedido y no sustituye una factura electrónica fiscal.`;
+  const html = emailLayout('ORDEN/BOLETA DE COMPRA', `<h1 style="margin:0 0 8px;font-size:26px">N.º ${order.number}</h1><p>Hola ${escapeHtml(order.customerName)}, recibimos tu pedido.</p>${orderRowsHtml(order)}<p style="font-size:13px;line-height:1.6"><strong>Forma de pago:</strong> ${paymentLabel}<br><strong>Fecha:</strong> ${orderDate.format(order.createdAt)}${deliveryHtml}</p><p style="font-size:13px;line-height:1.6">Confirmaremos disponibilidad y coordinaremos la entrega.</p>`);
 
   await transporter.sendMail({
     from: `Boutique del Este <${smtp.from}>`,

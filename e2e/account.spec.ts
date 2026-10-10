@@ -56,3 +56,16 @@ test('los favoritos de la cuenta piden sesión', async ({ request }) => {
   const write = await request.put('/api/account/favorites', { data: { favorites: [1, 2] } });
   expect(write.status()).toBe(401);
 });
+
+test('los datos de entrega de la cuenta piden sesión', async ({ request }) => {
+  const response = await request.put('/api/account/profile', { data: { delivery: { phone: '099 123 456' } } });
+  expect(response.status()).toBe(401);
+});
+
+test('un pedido con un teléfono inválido se rechaza con un mensaje claro', async ({ request }) => {
+  const response = await request.post('/api/orders', {
+    data: { customerName: 'Prueba', customerEmail: 'prueba@ejemplo.com', items: [], delivery: { phone: 'llamame' } },
+  });
+  expect(response.status()).toBe(400);
+  expect((await response.json()).message).toContain('teléfono');
+});

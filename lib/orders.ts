@@ -25,6 +25,7 @@ import {
   resolvePaymentStatus,
   type OrderLine,
 } from '@/lib/order-lines';
+import type { Delivery } from '@/lib/delivery';
 import type { Order } from '@/payload-types';
 
 type PaymentMethod = 'whatsapp' | 'mercado-pago';
@@ -38,6 +39,8 @@ type CreateOrderInput = {
   lookup: ProductLookup;
   /** Sólo si el cliente estaba con sesión iniciada. */
   customerId?: number;
+  /** Teléfono y dirección, ya validados con normalizeDelivery. Opcionales. */
+  delivery?: Delivery;
 };
 
 const payloadClient = () => getPayload({ config: configPromise });
@@ -93,6 +96,7 @@ export async function createOrder(input: CreateOrderInput) {
       surcharge,
       total: subtotal + surcharge,
       customer: input.customerId ?? null,
+      delivery: input.delivery ?? {},
       emailSent: false,
       events: [{ at: createdAt.toISOString(), type: 'created', detail: `Pedido por ${input.paymentMethod}` }],
     },
@@ -108,6 +112,7 @@ export async function createOrder(input: CreateOrderInput) {
     subtotal,
     surcharge,
     total: subtotal + surcharge,
+    delivery: input.delivery,
   });
 
   return { id: order.id, number, lines, subtotal, surcharge, total: subtotal + surcharge };

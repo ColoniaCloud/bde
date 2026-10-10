@@ -4,7 +4,7 @@ import configPromise from '@payload-config';
 import { getPayload } from 'payload';
 import { logError } from '@/lib/logger';
 import { assertMercadoPagoReady, buildOrderItems, createMercadoPagoOrder, MercadoPagoError, type CheckoutItemInput } from '@/lib/mercado-pago';
-import { normalizeCustomer, OrderError } from '@/lib/order-lines';
+import { normalizeCustomer, normalizeOrderDelivery, OrderError } from '@/lib/order-lines';
 import { appendEvent, attachMercadoPagoOrder, createOrder } from '@/lib/orders';
 import { databaseProductLookup } from '@/lib/product-lookup';
 import { mercadoPagoSurcharge } from '@/lib/pricing';
@@ -31,6 +31,7 @@ export async function POST(request: Request) {
       customerName?: string;
       payerEmail?: string;
       items?: CheckoutItemInput[];
+      delivery?: unknown;
     };
     const { customerName, customerEmail } = normalizeCustomer(
       body.customerName ?? '',
@@ -51,6 +52,7 @@ export async function POST(request: Request) {
       surcharge: mercadoPagoSurcharge(subtotal),
       lookup: databaseProductLookup,
       customerId: await signedInCustomerId(),
+      delivery: normalizeOrderDelivery(body.delivery),
     });
 
     try {

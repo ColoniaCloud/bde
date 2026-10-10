@@ -1,5 +1,6 @@
 'use client';
 
+import type { Delivery } from '@/lib/delivery';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 export type Customer = {
@@ -7,6 +8,7 @@ export type Customer = {
   email: string;
   name?: string | null;
   picture?: string | null;
+  delivery?: Delivery;
 };
 
 type AuthContextValue = {

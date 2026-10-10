@@ -4,6 +4,7 @@ import configPromise from '@payload-config';
 import { getPayload } from 'payload';
 import { AccountPanel } from '@/components/account-panel';
 import { getCustomerOrders } from '@/lib/customers';
+import { storedDelivery } from '@/lib/delivery';
 import { googleConfigured } from '@/lib/google-oauth';
 
 export const dynamic = 'force-dynamic';
@@ -28,7 +29,13 @@ export default async function AccountPage({
   return (
     <AccountPanel
       customer={customer
-        ? { id: customer.id, email: customer.email, name: customer.name ?? null, picture: customer.picture ?? null }
+        ? {
+          id: customer.id,
+          email: customer.email,
+          name: customer.name ?? null,
+          picture: customer.picture ?? null,
+          delivery: storedDelivery(customer.delivery),
+        }
         : null}
       googleEnabled={googleConfigured()}
       error={error}
@@ -40,6 +47,7 @@ export default async function AccountPage({
         surcharge: order.surcharge ?? 0,
         total: order.total,
         createdAt: order.createdAt,
+        delivery: storedDelivery(order.delivery),
         lines: (order.lines ?? []).map((line) => ({
           code: line.code,
           title: line.title,

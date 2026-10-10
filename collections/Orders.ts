@@ -126,6 +126,18 @@ export const Orders: CollectionConfig = {
       },
     },
     {
+      // Opcionales: si faltan, la entrega se coordina por WhatsApp.
+      name: 'delivery',
+      type: 'group',
+      label: 'Entrega',
+      fields: [
+        { name: 'phone', type: 'text', label: 'Teléfono', maxLength: 30 },
+        { name: 'address', type: 'text', label: 'Dirección', maxLength: 160 },
+        { name: 'city', type: 'text', label: 'Ciudad o localidad', maxLength: 80 },
+        { name: 'notes', type: 'textarea', label: 'Referencias', maxLength: 300 },
+      ],
+    },
+    {
       name: 'lines',
       type: 'array',
       label: 'Líneas',

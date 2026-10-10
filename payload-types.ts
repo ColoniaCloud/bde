@@ -291,6 +291,12 @@ export interface Order {
    * Sólo si el cliente estaba con sesión iniciada al comprar.
    */
   customer?: (number | null) | Customer;
+  delivery?: {
+    phone?: string | null;
+    address?: string | null;
+    city?: string | null;
+    notes?: string | null;
+  };
   /**
    * Precios congelados al momento de la compra.
    */
@@ -338,6 +344,12 @@ export interface Customer {
    * La foto de perfil de Google. Se actualiza en cada ingreso.
    */
   picture?: string | null;
+  delivery?: {
+    phone?: string | null;
+    address?: string | null;
+    city?: string | null;
+    notes?: string | null;
+  };
   /**
    * Códigos de producto. Se sincronizan desde el navegador al ingresar.
    */
@@ -614,6 +626,14 @@ export interface OrdersSelect<T extends boolean = true> {
   customerName?: T;
   customerEmail?: T;
   customer?: T;
+  delivery?:
+    | T
+    | {
+        phone?: T;
+        address?: T;
+        city?: T;
+        notes?: T;
+      };
   lines?:
     | T
     | {
@@ -650,6 +670,14 @@ export interface CustomersSelect<T extends boolean = true> {
   provider?: T;
   googleId?: T;
   picture?: T;
+  delivery?:
+    | T
+    | {
+        phone?: T;
+        address?: T;
+        city?: T;
+        notes?: T;
+      };
   favorites?: T;
   updatedAt?: T;
   createdAt?: T;
